@@ -1,0 +1,715 @@
+=== PAGE 1 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+光衡
+家庭能源 Autonomous Energy Agent
+Home Assistant × Anker SOLIX × Hermes Agent × Optimizer × ESP32-S3
+产品一句话
+让家庭储能从“被动执行固定规则”，升级为“自主观察未来变化、主动提出可执行方案、经用户确认后控制真实设备，并
+解释与验证结果”的家庭能源智能系统。
+版本 状态 赛道 目标
+V3.0 Hermes 主动决策版 充电储能
+24h 可演示闭环 + 真实设备控制链 
++ 感知终端
+V3.0 基于 V2.0 完整修订：保留 Home Assistant + SOLIX 主线，将 Hermes Agent 引入为主动观察与编排层；App 不再依赖用户输入指令，而
+改为“Agent 主动发现 → 提案 → 用户批准 → 执行 → 验证”的核心体验。
+
+=== PAGE 2 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+0. V3.0 修订摘要
+本次修订原则
+不改变赛题要求的“预测、决策、执行、解释、验证”主线。Hermes 的加入不是为了炫技，而是让系统具备持续观察、主
+动发现机会和自主编排能力；数值调度仍由确定性 Optimizer 完成，所有真实写入都经过 Safety Policy 和用户批准。
+V2.0 / 旧设计 V3.0 修正
+用户通过 App 选择或输入能源意图
+默认不要求用户输入；Hermes 根据 HA/SOLIX、天气、电价等上下文主
+动判断是否需要 Replan
+Energy Brain 偏规则触发
+Hermes Agent 作为主动观察与编排层，持续读取状态、识别机会/风
+险、决定何时调用 Optimizer
+计划变化后直接进入执行链
+新增 Decision Proposal：真正执行前必须生成待确认决策卡，由用户批
+准
+App 策略页以模式切换为核心
+策略页升级为 Agent Control Center：当前计划、待确认提案、证据、
+24h Plan、执行记录
+Haptic Language 为 P0 当前硬件阶段砍掉 LRA + DRV2605L，不进入 V3.0 MVP
+Energy Handoff 使用 NFC
+NFC 当前砍掉，不进入 V3.0 MVP；需要深入解释直接通过 App Push / 
+Deep Link
+Hall Sensor 可选 TMAG5273 A2 进入硬件验证计划，用于自动 Magnetic Context
+磁吸结构未冻结
+原型采用 6 颗 4×1mm N42 圆片钕磁铁，背壳内侧贴片固定；最终以实
+测吸力和 Hall 基线为准
+Hermes 未纳入正式架构
+Hermes 部署在 Linux/VPS 测试服务器，不运行于 ESP32-S3；ESP32 作
+为实体感知与批准入口
+0.1 术语冻结
+术语 定义 边界
+光衡 完整家庭能源智能调度系统 不是单指 App 或终端
+光衡 App Android / iOS 深度管理、确认与解释界面 不直接计算充放电功率
+Hermes Agent 主动观察、上下文理解、机会识别、工具编排 不直接自由生成底层功率命令
+Energy Optimizer 确定性 24h 数值调度器 负责具体时间、功率、Reserve SOC
+Decision Proposal Agent 生成的待确认执行方案 批准前不得写入真实设备
+Safety Policy 设备能力、SOC、数据新鲜度、白名单约束 所有写操作最后一道门
+光衡终端 ESP32-S3 实体 Companion 不是储能电池 / 电表 / SOLIX 替代品
+Device Context desktop / portable / magnetic 只改变终端交互，不改变家庭能源策略
+
+=== PAGE 3 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+1. 产品定义
+光衡是一套运行在 Home Assistant 生态上的家庭能源 Autonomous Energy Agent，由 Flutter App、Home 
+Assistant、Hermes Agent、Energy Optimizer、Safety Policy、Anker SOLIX 官方集成和 ESP32-S3 光衡终端组成。
+核心问题
+不是“现在电池还有多少”，而是：为了接下来会发生的天气、电价、负载和光伏变化，现在是否值得调整储能计划？如果
+值得，系统应该主动提出什么方案，并在用户批准后安全执行？
+1.1 核心闭环
+阶段 输入 / 动作 输出
+感知
+SOLIX SOC/功率、家庭负载、光伏、电价、天
+气
+当前能源上下文
+观察 Hermes 持续读取状态与事件 机会 / 风险候选
+预测 电价、PV、负载趋势 未来 24h 约束
+决策 Hermes 判断是否需要 Replan replan_required + reason
+优化 Optimizer 计算确定性计划 时间、功率、Reserve SOC、预计成本
+提案 生成 Decision Proposal 旧方案 vs 新方案 + 原因 + 影响
+确认 App / 光衡终端请求用户批准 approved / rejected / expired
+安全 Safety Policy 再校验 ALLOW / DENY
+执行 Home Assistant → SOLIX 官方集成 设备状态改变
+验证 回读真实状态 Execution Verified / Failed
+解释 App + 终端展示证据 为什么、做了什么、结果如何
+价值验证 Baseline vs Optimized 节省、自用率、备电结果
+1.2 产品原则
+ Agent 主动，不等用户发指令。
+ LLM 负责理解上下文和编排，Optimizer 负责确定性数值。
+ 默认 Confirm Mode：真实设备执行前必须获得用户批准。
+ 批准的是一个锁定的 Plan ID；如果关键数据变化导致方案失效，必须重新计算并重新确认。
+ 执行不是终点，必须回读状态并验证。
+
+=== PAGE 4 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+2. 赛题对齐
+赛题要求设计并实现一个可在 Home Assistant 中运行的家庭能源大脑，并结合 Anker SOLIX 官方插件的实时功率、电池
+状态、控制写入能力，完成预测、决策、执行与解释，形成可感知、可演示、可验证的能源价值闭环。V3.0 将每个要求
+映射为明确模块。
+赛题要求 光衡 V3.0 对应能力 Demo 证据
+实时功率 / 电池状态 HA + SOLIX EnergyState 首页实时状态
+电价 / 天气等外部信号 Tariff / Weather Context 策略证据卡
+光伏自用 PV Forecast + Optimizer 白天留充电空间
+动态电价套利 Price Slots + Optimizer 低价充 / 高价放
+停电备电 Reserve SOC / BACKUP Policy 提高最低 SOC
+预测 PV / Load / Price Forecast 24h Plan
+决策 Hermes Opportunity Detection 主动生成 Proposal
+执行 HA → SOLIX Adapter 写入 / Mock 同 Schema
+解释 Decision Evidence + Explain Engine 通知 / 详情页
+可感知 Push + 光衡终端 Aura / Lift 用户不主动打开 App 也能知晓
+可验证 Execution Verification + Baseline 状态回读 + 报表
+V3.0 的核心差异
+不是“用户打开 App 后让系统优化”，而是“系统先发现值得优化的事情，主动把一个可解释、可验证的方案交给用户确
+认”。
+2.1 目标用户
+拥有或计划使用家庭光伏 / 储能、处于峰谷或动态电价环境，希望降低电费、提高光伏自用率与备电安全，但不希望每
+天盯着数据并手动调整计划的家庭用户。
+2.2 非目标
+ 不做强化学习、复杂用户习惯学习、多家庭权限、多 Agent 社会。
+ 不做 EV、复杂全屋设备联动。
+ 不重写 SOLIX 底层协议。
+ 不让 LLM 直接自由生成低层充放电命令。
+ 不在 24h MVP 内实现 NFC、LRA 震动。
+
+=== PAGE 5 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+3. V3.0 主体验：Autonomous Energy Agent + Human Approval
+Home Assistant / SOLIX / Weather / Tariff 数据进入
+↓ Hermes 持续观察并识别机会 / 风险
+↓ 判断是否值得 Replan
+↓ 调用 Energy Optimizer
+↓ 生成 Decision Proposal（旧方案 vs 新方案）
+↓ App Push / 光衡终端主动提醒
+↓ 用户：允许执行 / 暂不执行 / 查看原因
+↓ Safety Policy 二次校验
+↓ Home Assistant → SOLIX 执行
+↓ 回读真实状态并 Verify
+↓ App / 终端反馈结果，报表累计价值
+3.1 为什么需要用户确认
+能源设备属于真实物理执行系统。V3.0 选择“Agent 主动、用户确认”的中间态：智能性体现在系统主动发现与提出方
+案；安全性体现在用户对重大真实写入保留最终批准权。
+模式 行为 V3.0
+Observe 只观察和解释，不执行 可作为 Debug
+Confirm Agent 自主判断，用户批准后执行 MVP 默认
+Autopilot 白名单内自动执行，重大动作仍确认 P2 / 后续
+3.2 什么情况下生成提案
+ 未来低价窗口即将出现，且提前充电具备明确收益。
+ 未来高峰电价即将出现，需要准备放电。
+ 天气从晴转阴 / 光伏预测显著下降，当前计划可能不足。
+ 天气转好 / PV 预测上升，应减少夜间充电给光伏留空间。
+ 实际负载显著偏离预测，需要重新规划。
+ SOC 低于计划轨迹或执行未达到目标。
+ BACKUP 策略或异常事件要求提高 Reserve SOC。
+
+=== PAGE 6 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+4. Hermes Agent 在光衡中的职责
+定位
+Hermes 是主动观察与工具编排层，不是数值优化器。它决定“是否需要做点什么”和“应该调用哪些工具”，Optimizer 决
+定“具体怎么充、怎么放”。
+4.1 部署方式
+组件 部署 说明
+Hermes Agent 租用 Linux / VPS，先测试 1 个月 常驻运行；不放在 ESP32-S3
+Home Assistant 本地 / 树莓派 / 测试环境 状态与执行总线
+Optimizer API 同服务器或独立 FastAPI 确定性计算
+Flutter App Android + iOS 批准、解释、报表、设备管理
+ESP32-S3 终端 Wi-Fi 连接后端 / HA Ambient 感知与快速批准入口
+4.2 Hermes 工具边界
+能力 是否允许 说明
+读取 HA Entity 允许 SOC、功率、状态、时间戳
+读取天气 / 电价 允许 作为上下文
+调用 Optimizer 允许 输入标准化上下文，获得数值计划
+生成解释 允许 根据真实证据解释计划变化
+直接自由生成“1374W”并写设备 禁止 必须由 Optimizer 输出
+在无批准情况下调用高风险写操作 禁止 MVP 默认 Confirm Mode
+批准后调用白名单 HA Service 允许 仍需 Safety Policy 校验
+4.3 Home Assistant 连接能力
+Hermes 官方 Home Assistant 集成支持通过 Gateway 订阅实时状态变化，并提供实体查询、服务发现和服务调用能
+力。V3.0 只启用与能源相关的白名单 Entity / Service，并通过单独的 Executor 封装真实写入。
+安全原则
+即使 Hermes 具备 ha_call_service，也不让它直接对 SOLIX 裸写。所有能源写操作统一走 apply_energy_plan(plan_id) / 
+set_reserve_soc(...) 等受控接口。
+
+=== PAGE 7 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+5. Energy Brain  与Optimizer
+5.1 Context Collector
+输入 示例 来源
+battery_soc 42% SOLIX / HA
+battery_power -0.3 kW SOLIX / HA
+solar_power 2.8 kW SOLIX / HA
+home_load 1.7 kW HA / SOLIX
+grid_power 0.4 kW HA / SOLIX
+price_slots 00:00-06:00 低价 Tariff
+weather_forecast 晴→阴 Weather
+pv_forecast 明日 -37% Forecast
+load_forecast 18:00 上升 History / Template
+5.2 Forecast MVP
+ PV Forecast：天气 × 时段 × 基础光伏曲线；Hackathon 不上复杂 ML。
+ Load Forecast：最近 7 天同小时平均 / 中位数；无历史时使用家庭模板。
+ Price Forecast：直接使用电价时段或 Mock Scenario。
+5.3 Optimizer MVP
+时间片 30 分钟或 1 小时，覆盖未来 24h；输入电池容量、初始 SOC、充放电功率限制、效率、最低 / 最高 SOC、PV / 
+Load / Price 以及策略约束。
+策略 目标函数倾向
+SAVE 购电成本最低，较积极利用低谷与高峰价差
+AUTO 成本 + 光伏自用 + Reserve 综合平衡
+BACKUP Reserve SOC 权重最高，减少套利放电
+5.4 Hermes  与Optimizer 的分工示例
+Hermes：天气变化显著 → 当前计划可能不足 → 需要 Replan
+Optimizer：Target SOC 45% → 75%，00:30-03:00 充电 1.2kW
+Hermes：把变化解释成“为什么、影响什么、值不值得”
+App：向用户提交可批准 Proposal
+
+=== PAGE 8 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+6. Decision Proposal：执行前的核心数据对象
+V3.0 新增 Decision Proposal，所有真实写入必须绑定 Proposal ID。用户批准的是一个具体、可追踪、可过期的计划，
+而不是一个模糊的“允许 AI 控制”。
+字段 示例 用途
+proposal_id GH-20260917-001 唯一追踪
+trigger weather_replan 为什么触发
+created_at 2026-09-17 12:30 时间戳
+old_target_soc 45% 旧计划
+new_target_soc 75% 新计划
+window 00:30-03:00 执行窗口
+charge_power 1.2 kW Optimizer 输出
+reserve_soc 50% 硬约束
+evidence[] PV -37%、低价窗口、高峰价 解释证据
+estimated_impact 减少高峰购电 价值描述
+expires_at 计划窗口前 防止旧方案误执行
+approval_state pending/approved/rejected/expired 状态机
+6.1 Approval 状态机
+PENDING → 用户查看
+→ APPROVED → Safety Recheck → EXECUTING → VERIFIED
+→ REJECTED：记录原因，不执行
+→ EXPIRED：关键数据变化或超时 → 重新 Replan
+6.2 批准后再次校验
+ SOC 是否仍在预期范围。
+ 电价 / 天气 / 负载是否发生重大变化。
+ 设备是否在线。
+ 目标功率是否仍在能力范围。
+ Proposal 是否未过期。
+ Plan ID 是否与用户批准的一致。
+
+=== PAGE 9 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+7. Safety Policy 与真实设备控制
+硬规则
+任何 Agent 判断都不能绕过 Safety Policy。出现数据缺失、时间戳过旧、实体不可写、设备离线、功率越界或 SOC 越界
+时，系统必须拒绝真实写入。
+检查项 策略
+SOC 下限 / 上限 严格限制在配置范围
+最大充 / 放电功率 不超过设备能力与当前接口上限
+Reserve SOC BACKUP / 用户策略优先
+数据新鲜度 关键 Entity 超时则禁止写入
+服务白名单 只允许已验证的 HA Service / Script
+Proposal ID 必须存在且已批准
+方案漂移 输入变化超阈值则使 Proposal 失效
+执行失败 停止连续写入，回退安全状态并通知
+7.1 SOLIX Adapter
+上层不依赖具体 Entity 名称。开工第一小时读取官方插件实际暴露的 Entity / Service，并冻结映射表；上层统一调用适
+配器能力。
+apply_energy_plan(plan_id)
+set_reserve_soc(value)
+set_energy_mode(mode)
+get_energy_state()
+verify_execution(plan_id)
+7.2 执行验证
+执行后不是“命令返回 200 就算成功”，而是等待短时间后重新读取 battery_power / SOC / writable state，判断设备
+是否真实进入目标状态。
+
+=== PAGE 10 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+8. App  信息架构V3.0
+一级导航仍保留：首页 / 策略 / 报表 / 设备。视觉基线不推翻，仍是白色轻量能源产品风格；但信息层级必须从“用户主
+动操作”调整为“Agent 主动工作 + 用户批准”。
+页面 V3.0 核心问题
+首页 家里现在发生什么？光衡有没有发现值得关注的事情？
+策略 Agent 接下来准备怎么做？为什么？有没有待确认提案？
+报表 Agent 做过哪些决定？真实结果和价值是什么？
+设备 我的光衡终端是否正常？
+设置 系统连接、通知、自动化权限、风险边界如何配置？
+8.1 App 不做什么
+ 不把聊天输入框作为主入口。
+ 不要求用户每天手动配置充放电时间。
+ 不把 SAVE / AUTO / BACKUP 做成占据半屏的主要交互。
+ 不让设备页混入家庭储能 SOC、PV、Load 等系统数据。
+交互主线
+系统先做功课，用户只在“需要做真实动作”时被叫回来做决定。
+
+=== PAGE 11 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+9.  首页Main V3.0
+9.1 保留
+ 天气、3D 房屋 + 光伏 + 家庭储能视觉中心。
+ 实时光伏功率、家庭负载、家庭储能 SOC、充放电状态。
+ 今日发电、用电、节省与趋势。
+9.2 必须新增
+模块 内容 优先级
+Autopilot 状态条
+Agent 正在观察 / 正在重算 / 等待确认 / 正在执
+行
+P0
+Next Action 卡 例如“17:30 预计进入高峰放电” P0
+Pending Proposal 卡 若存在待确认方案，显示变化、原因、影响 P0
+Future Alert 高峰、天气变化、SOC 风险提前提醒 P0.5
+Execution Verified 最近一次真实执行是否验证成功 P0
+9.3 首页示例
+光衡发现一个节省机会
+明日光伏预计下降 37%，当前夜间目标 SOC 45% 可能不足。建议 00:30-03:00 提前充至 75%。
+预计影响：降低明晚高价购电需求。
+按钮：允许执行 / 暂不 / 查看原因
+
+=== PAGE 12 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+10.  策略Strategy V3.0：Agent Control Center
+这是原型最需要改动的页面。V2.0 的策略页强调 SAVE / AUTO / BACKUP 和 24h 计划；V3.0 要把“Agent 正在做什
+么”和“待确认决策”放到第一层。
+10.1 页面结构
+顺序 模块 说明
+1 Agent 状态
+观察中 / Replan / Pending Approval / 
+Executing
+2 待确认 Proposal 旧方案 → 新方案、原因、预计影响、批准按钮
+3 当前 24h Plan 充电 / 光伏 / 放电 / Reserve 时间片
+4 决策证据 电价、天气、SOC、负载、PV 预测
+5 策略偏好摘要
+AUTO / SAVE / BACKUP 作为约束，不作为主操
+作
+6 最近 Replan 触发原因与版本记录
+10.2 Proposal  详情页/ Bottom Sheet
+ 为什么现在提出这个方案。
+ 旧计划 vs 新计划。
+ 具体执行窗口、目标 SOC、功率。
+ 预计收益 / 影响与不确定性。
+ “允许执行”“暂不执行”两个明确动作。
+ 批准后展示 Plan ID 与执行状态。
+10.3 SAVE / AUTO / BACKUP 的新位置
+三种模式仍保留，但定义为策略边界 / 用户偏好，而不是每次操作的入口。默认 AUTO；用户可在策略偏好或设置中手动
+覆盖。Hermes 必须尊重当前 mode 和 Reserve 约束。
+
+=== PAGE 13 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+11.  报表Reports V3.0
+报表不仅证明“省了多少钱”，还要证明 Agent 的决策链是可追踪、可验证的。
+模块 内容
+Baseline vs Optimized 同场景固定策略成本 vs 光衡策略成本
+Savings Trend 今日 / 本周智能节省趋势
+Solar Self-use 光伏自用率变化
+Decision Log 今天 Agent 主动发现了哪些机会 / 风险
+Approval Log 哪些 Proposal 被批准 / 拒绝 / 过期
+Execution Verification 每次执行是否真实回读成功
+Replan History 天气、电价、负载变化如何改变计划
+11.1 一条完整记录示例
+12:08 Weather Update：明日 PV -37%
+12:09 Hermes：触发 Replan
+12:09 Optimizer：Target SOC 45% → 75%
+12:10 Proposal GH-001：等待确认
+12:12 用户批准
+00:30 HA/SOLIX：执行充电 1.2kW
+00:30:05 回读：0W → 1.18kW，Verified ✓
+
+=== PAGE 14 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+12.  设备Device  与设置Settings
+12.1 Device 页面保持语义边界
+模块 内容
+终端主卡 光衡终端、在线 / 离线、设备图片
+终端电量 终端自身锂电池，不等于 SOLIX SOC
+Wi-Fi / 最近同步 连接状态
+Device Context desktop / portable / magnetic，只读显示
+显示设置 亮度、自动息屏、夜间亮度
+Energy Aura 开关 / 亮度
+Firmware / OTA 版本、检查更新
+设备信息 型号、ID、固件
+12.2 Settings “ ”新增自动化与批准
+设置项 V3.0
+Automation Mode 默认 Confirm
+通知权限 Proposal、执行成功、异常、Future Alert
+审批超时 Proposal 过期策略
+高风险动作 始终要求确认
+Home Assistant 连接状态 / 地址 / Token 管理
+SOLIX Adapter / Entity 映射状态
+Hermes Agent 服务器在线状态 / 最近心跳
+隐私 只上传能源上下文所需数据
+
+=== PAGE 15 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+13.  通知与批准UX
+通知是 V3.0 的核心入口，因为用户不再主动输入。
+13.1 Push 内容规范
+光衡建议调整今晚计划
+原因：明日光伏预计下降 37%。
+当前方案：目标 SOC 45%。
+新方案：目标 SOC 75%，00:30-03:00 低价充电。
+预计影响：减少明晚高价购电。
+操作：允许执行 / 暂不 / 详情
+13.2 通知分
+级别 场景 动作
+Info 计划正常，无需用户操作 仅 App 内记录
+Proposal 需要真实写入 Push + 待确认卡
+Warning 执行失败 / 数据异常 Push + 红色状态
+Critical 安全边界触发 停止自动写入 + 强提醒
+13.3 防打扰
+ 同一触发原因合并，不连续刷屏。
+ Proposal 有冷却时间；新 Proposal 必须有显著计划变化。
+ 普通 Replan 若不需要真实写入，不要求用户确认。
+ 夜间通知允许用户设置免打扰，但 Critical 除外。
+
+=== PAGE 16 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+14.  数据模型V3.0
+14.1 EnergyState
+字段 类型 / 单位 来源
+battery_soc % SOLIX / HA
+battery_power kW SOLIX / HA
+solar_power kW SOLIX / HA
+home_load kW HA / SOLIX
+grid_power kW HA / SOLIX
+electricity_price ¥/kWh Tariff
+weather_code enum Weather
+pv_forecast kWh Forecast
+load_forecast kW[] Forecast
+energy_mode enum Policy
+reserve_soc % Optimizer / Policy
+strategy_slots array Optimizer
+14.2 AgentState
+字段 说明
+agent_status observing / replanning / pending / executing / degraded
+last_observation_at 最近观察
+last_replan_at 最近重算
+active_proposal_id 当前待确认提案
+hermes_online 服务器状态
+automation_mode observe / confirm / autopilot
+14.3 ProposalState / ExecutionState
+字段 说明
+proposal_id 唯一 ID
+approval_state pending / approved / rejected / expired
+plan_hash 锁定方案内容
+approved_at 批准时间
+execution_state queued / running / verified / failed
+verified_at 回读验证时间
+failure_reason 失败原因
+
+=== PAGE 17 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+15.  光衡终端硬件V3.0
+光衡终端继续承担“手机之前的感知层”：让用户在不打开 App 的情况下感知重要变化，并在必要时快速批准或查看原
+因。
+项目 V3.0 硬件基线 用途
+主板 ESP32-S3-Touch-AMOLED-1.8 UI、Wi-Fi、触摸、传感
+板载 IMU QMI8658 Lift-to-Explain、姿态 / 运动识别
+板载音频 麦克风 + Speaker + ES8311 后续语音 / 提示，P1
+Hall Sensor TMAG5273 A2，I2C 3轴 Magnetic Context
+磁吸 4×1mm N42 圆片磁铁 ×6，背壳内贴 原型磁吸结构
+电池 3.7V LiPo，MX1.25 2P 移动供电
+外壳 手表级圆角方形树脂壳 桌面 / 随身 / 磁吸
+15.1 已砍掉
+ LRA + DRV2605L：本阶段不购买、不开发，后续产品化再加入触觉语言。
+ NFC Tag：本阶段不做，Handoff 不依赖 NFC。
+15.2 Magnetic Context
+磁铁只负责吸附，Hall Sensor 负责识别磁场变化。由于设备自身磁铁会形成固定背景场，TMAG5273 需要先记录 
+baseline，再通过三轴磁场变化 + IMU 稳定姿态判断“已吸附手机”。
+设备自身磁环 / 6颗磁铁 → baseline Bx/By/Bz
+贴到手机 → 磁场发生显著变化
+Hall ΔB + IMU 姿态稳定 → magnetic_attached=true
+终端自动切换 Magnetic Context
+
+=== PAGE 18 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+16. GuangHeng Sense V3.0
+Sense 继续存在，但从“功能堆叠”收敛为 6 个与主闭环直接相关的能力。
+能力 体验 优先级
+Energy Aura 屏幕边缘光环提示正常 / Proposal / Warning P0.5
+Energy Clock 一眼看未来 24h 充 / 放 / PV / Reserve P0
+Lift-to-Explain 拿起设备自动展开“为什么” P0
+Plan Morph 旧计划连续变形到新计划 P0
+Future Alert 在高峰 / 风险前提前提醒 P0
+What-if Peek 固定策略 vs 优化策略快速对比 P0
+16.1  被掉的Sense
+ Haptic Language：因 LRA + DRV2605L 当前砍掉，V3.0 不进入 MVP。
+ Energy Handoff：因 NFC 当前砍掉，改用 App Push / Deep Link。
+16.2 终端批准入口
+如果时间允许，光衡终端可展示 Pending Proposal，并提供“允许 / 暂不”两个触摸操作。批准仍写入同一个 Proposal 
+ID，不存在两套审批逻辑。
+
+=== PAGE 19 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+17.  技术架构V3.0
+Flutter App（Android + iOS）- 状态 / Proposal / 报表 / 设备 / 设置
+↕ HTTPS / WebSocket / Push
+Hermes Agent（Linux / VPS）- 主动观察 / Tool Orchestration / Explain
+↕
+Home Assistant - 状态总线 / 历史数据 / Entity / Service
+↕                    ↕
+Weather / Tariff     Energy Optimizer API
+                     ↓
+                  Safety Policy
+                     ↓
+                SOLIX Adapter
+                     ↓
+        Anker SOLIX Official Integration
+                     ↓
+                Anker SOLIX 真机
+光衡终端通过 Wi-Fi 与后端 / HA 同步 AgentState、ProposalState 和 EnergyState；它不运行 Hermes CLI。
+17.1 Hermes 运行策略
+ Gateway 常驻运行，监听 HA 状态变化和定时检查。
+ 只有满足阈值或事件触发时调用 Optimizer，避免无意义频繁推理。
+ 生成 Proposal 后进入等待，不得继续高风险执行。
+ 用户批准后由 Executor 触发 Safety Policy + HA/SOLIX 写入。
+17.2 24h 比赛容灾
+ Hermes 不可用时，Rule Trigger 可直接调用 Optimizer，主闭环仍可演示。
+ SOLIX 无实机时，使用与正式 Entity Schema 一致的 Mock / Replay。
+ 天气 / 电价 API 不稳定时，使用固定 Scenario。
+
+=== PAGE 20 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+18.  核心比赛Demo
+18.1  主Demo   ：天气变化→ Agent     主 提案→用 批准→ 机 行动 户 真 执
+步骤 现场动作
+1 初始天气为晴，夜间目标 SOC 45%，为次日光伏留空间
+2 Weather Context 切换为阴天，PV Forecast -37%
+3 Hermes 主动观察到显著变化，触发 Replan
+4 Optimizer 生成新计划：Target SOC 75%，00:30-03:00 低价充电
+5 App 自动弹 Proposal：45% → 75%，说明原因与预计影响
+6 用户点击“允许执行”
+7 Safety Policy 二次检查通过
+8 HA → SOLIX 写入控制
+9 5 秒后回读功率 / 状态，显示 Verified ✓
+10 报表记录 Decision / Approval / Execution / Baseline 差异
+18.2  次Demo  ：高峰电价Future Alert
+系统在高峰前 1-2 小时主动提示“预计进入高峰，当前计划将在 18:00 开始放电”。如果当前计划已批准且无需改变，
+不再次骚扰用户；只有计划变化需要真实新写入时才生成新 Proposal。
+18.3  硬件Demo
+ 桌面静止：Energy Clock 常驻。
+ 拿起：Lift-to-Explain 展开 Proposal 原因。
+ 磁吸手机：Hall + IMU 自动进入 Magnetic Context，显示大字号关键状态。
+
+=== PAGE 21 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+19. MVP 验收标准
+# 验收项 通过条件
+1 能源状态
+App 正确展示 PV / Load / SOC / Battery 
+Power
+2 Hermes 主动观察 至少 1 个 Context 变化可自动触发判断
+3 Replan 天气变化可使 45% → 75%
+4 Optimizer 输出 24h 计划与确定性数值
+5 Decision Proposal 包含 Plan ID、原因、旧/新方案、执行窗口
+6 用户批准 未经批准不得进行真实高风险写入
+7 Safety Policy 越界 / 过期 / 数据异常可阻止执行
+8 执行链 HA 收到写入并进入 SOLIX 或同 Schema Mock
+9 执行验证 状态回读并显示 Verified / Failed
+10 解释 至少 3 条可追溯证据
+11 Baseline 同场景计算固定策略 vs 优化策略
+12 Device 页 仅显示光衡终端自身状态
+13 Lift-to-Explain IMU 拿起触发解释
+14 Magnetic Context Hall + IMU 可识别磁吸状态或提供实验数据
+15 Plan Morph 展示计划前后变化
+Definition of Done
+评委在 3-5 分钟内看到：外部信号变化 → Hermes 主动发现 → Optimizer 重算 → App 提案 → 用户批准 → Safety → 
+HA/SOLIX 执行 → 状态回读验证 → App / 终端解释 → Baseline 对比。
+
+=== PAGE 22 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+20. 24 小时开发计划
+时间 重点 交付
+0-2h 接口冻结
+EnergyState / AgentState / ProposalState / 
+Entity Map
+2-5h Optimizer + Scenario Baseline、24h Plan、45→75 Replan
+5-8h Home Assistant + SOLIX Adapter 读取 / 写入 / Mock Replay
+8-11h Hermes Agent
+VPS 部署、HA 连接、触发 Replan、调用 
+Optimizer
+11-16h Flutter App V3
+首页 Autopilot、Strategy Proposal、Reports 
+Log、Device
+16-19h Approval + Safety + Verify 批准状态机、写入门禁、状态回读
+19-21h 光衡终端
+AMOLED、Wi-Fi、IMU、Energy Clock、Hall 
+实验
+21-23h 集成 Demo
+Push / Proposal、Plan Morph、Lift-to-
+Explain
+23-24h 稳定性 Replay、异常、录屏、数据校验，不再加功能
+20.1 先
+层级 必须完成
+P0
+EnergyState、Hermes 触发、Optimizer、Proposal、Approval、
+Safety、HA/SOLIX Adapter、Verify、App 3页主链
+P0.5 Energy Aura、Future Alert、Hall Magnetic Context
+P1 终端语音、真实 OTA、更多自动化模式
+明确砍掉 LRA/DRV2605L、NFC、复杂习惯学习、多 Agent
+
+=== PAGE 23 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+21. 风险与容灾
+风险 影响 应对
+Hermes 服务不稳定 Agent 主链中断 Rule Trigger 直连 Optimizer 的 fallback
+HA / SOLIX 实机不可用 无法现场真机写入 Mock Entity 与正式 Schema 一致 + Replay
+官方插件字段不同 写入失败 第一小时冻结 Entity / Service Map
+LLM 输出漂移 Proposal 不可复现
+Hermes 只输出结构化意图 / 原因；数值来自 
+Optimizer
+用户批准后场景变化 旧方案可能不安全 Plan Hash + Expiry + Safety Recheck
+通知过多 用户疲劳 阈值、冷却、去重
+Hall 被自身磁铁干扰 Magnetic Context 误判 A2 宽量程 + baseline + ΔB + IMU 融合
+硬件进度拖延 影响主 Demo App / Hermes / Optimizer 独立可完成主闭环
+21.1  现场Replay
+ 一键重置 SOC / 电价 / 天气 / 负载。
+ 一键播放“晴 → 阴，PV -37%”场景。
+ 一键切换 SOLIX Adapter：Real / Mock。
+ 最后 1 小时禁止新增功能。
+
+=== PAGE 24 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+22. UI/UX 原型修改结论
+结论：需要改，但不用推翻重做
+现有四 Tab、白色轻量视觉、3D 家庭能源首页都保留；主要修改信息层级和交互主线。必须新增 Agent 状态、待确认 
+Proposal、批准流和执行验证。
+22.1 哪些页面必须改
+页面 修改程度 具体变化
+首页 中等
+增加 Autopilot 状态、Next Action、Pending 
+Proposal、Verified
+策略 较大
+从“模式选择页”升级为 Agent Control 
+Center，Proposal 放第一屏
+报表 中等
+增加 Decision Log / Approval Log / Execution 
+Verification
+设备 很小
+保持终端管理；新增 Hall / Context 只读状态即
+可
+设置 中等
+新增 Automation Mode、Hermes / HA / 
+SOLIX 连接状态与审批设置
+22.2 不需要重做的视觉资产
+ 首页 3D 房屋 + 光伏 + 储能。
+ 白色 / 浅蓝灰背景、海军蓝文字、绿色节省、橙色高峰。
+ 底部导航：首页 / 策略 / 报表 / 设备。
+ 圆角卡片、轻阴影、移动端 320-430dp。
+22.3 最重要的新件
+Decision Proposal Card
+标题：光衡建议调整今晚计划
+变化：45% → 75%
+原因：明日光伏预计下降 37%
+执行：00:30-03:00
+影响：降低晚高峰购电需求
+按钮：允许执行 / 暂不 / 详情
+
+=== PAGE 25 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+23. 开发前接口冻结清单
+接口 / Schema 必须冻结
+HA Entity Map SOC、battery_power、PV、Load、Grid、可写 Service
+Optimizer Input / Output 24h slots、约束、plan_hash
+Proposal Schema proposal_id、old/new plan、evidence、expiry
+Approval API approve / reject / expire
+Execution API apply_plan / verify
+Agent Trigger weather_changed / tariff_window / soc_deviation / load_deviation
+Flutter Models EnergyState / AgentState / ProposalState / TerminalState
+ESP32 Sync HTTP / MQTT 二选一，优先团队最熟方案
+23.1  推荐API 轮廓
+GET /energy/state
+GET /agent/state
+GET /proposals/pending
+POST /proposals/{id}/approve
+POST /proposals/{id}/reject
+POST /optimizer/replan
+POST /execution/{plan_id}/apply
+GET /execution/{plan_id}/verify
+
+=== PAGE 26 ===
+光衡 | PRD V3.0 | Anker Hackathon
+光衡 - Autonomous Energy Agent | 开发基线
+24. 最终产品叙事
+比赛现场不要把光衡描述成“AI + HA + ESP32 的组合”，而要描述成一个主动工作的家庭能源 Autopilot。
+最终叙事
+Hermes 负责持续观察家庭能源环境、发现什么时候值得重新规划；Optimizer 负责把天气、电价、光伏和负载变成确定性的 
+24 小时计划；用户只在真实设备将被改变前收到一个清楚的决策提案；批准后由 Safety Policy、Home Assistant 和 SOLIX 
+完成安全执行，并通过状态回读验证结果。光衡 App 与光衡终端负责让整个过程随时可见、可理解、可干预。
+24.1  评委3-5 分 点钟记忆
+ Agent 不是等人输入，而是主动发现“现在该做什么”。
+ 天气变化触发 Replan：45% → 75%。
+ 真实执行前生成 Proposal，由用户一键批准。
+ LLM 不直接算功率，Optimizer + Safety 承担数值和安全边界。
+ SOLIX 执行后状态回读，明确显示 Verified。
+ Energy Clock + Lift-to-Explain 让后台决策变成可感知实体体验。
+ Baseline vs Optimized 证明价值，而不是只展示数据。
+24.2 一句话收尾
+光衡不是让用户更会管理电池，而是让系统先替用户把能源问题想清楚，在真正需要改变设备
+时，只把一个值得批准的决定交给用户。

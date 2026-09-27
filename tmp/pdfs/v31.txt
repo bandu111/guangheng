@@ -1,0 +1,1139 @@
+
+===== PAGE 1 =====
+
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+        光衡                                                                        
+                                                                                  
+                                                                                  
+                                                                                  
+        Autonomous      Energy   Agent                                            
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+        产品需求文档                   PRD      V3.1                                    
+                                                                                  
+                                                                                  
+                                                                                  
+        开发冻结版    · 面向 Anker Hackathon 24 小时 Demo                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+         核心闭环：主动观察    → 重规划  → 决策提案  → 用户批准  → 安全执行  → 状态回读 → 价值验证                
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+              项目                               冻结值                                
+                                                                                  
+         技术栈           Flutter + Provider + MVVM；GuangHeng Control Plane；Home Assistant
+         Agent         Hermes Agent：观察、机会识别、工具编排、解释；不直接计算功率                       
+                                                                                  
+         优化            Energy Optimizer：确定性 24h 计划与可复现数值                          
+                                                                                  
+         执行            Safety Policy → SOLIX Adapter → 赛事官方插件 / 同 Schema Mock     
+         目标平台          Android / iOS；ESP32-S3 光衡终端为 Companion，不作为主链依赖             
+                                                                                  
+         默认模式          Confirm Mode；所有高风险真实写入必须绑定已批准 Proposal                     
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+        版本日期：2026-09-17                                                           
+        状态：可以据此进行接口冻结、原型修订与  P0 开发                                                
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+
+===== PAGE 2 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+                                                                                  
+        0. V3.1   修订摘要                                                            
+                                                                                  
+                                                                                  
+                                                                                  
+        V3.1 保留 V3.0 的主动能源 Agent 主线，并把概念稿升级为可编码、可验收、可回放的开发基线。新增内容不改变产             
+        品叙事，只补足工程权责、数值规则、安全边界和比赛容灾。                                               
+                                                                                  
+             新增 / 修订                          V3.1 冻结结论                           
+         Control Plane  新增 GuangHeng Backend，作为业务状态、审批、日志、推送和执行事务的唯一可信源。          
+                                                                                  
+         推送             不实现用户登录；使用极光推送 Registration ID / Alias 绑定家庭实例。            
+                                                                                  
+         SOLIX          明确赛事官方插件的能力矩阵、版本、型号、地区和读写边界；运行时能力探测。                      
+         Optimizer      补充目标函数、SOC 动力学、约束、无解降级和确定性要求。                             
+                                                                                  
+         Baseline       同初始状态、同外部输入、同时间范围公平比较，禁止虚构节省。                             
+                                                                                  
+         状态机            Proposal 与 Execution 分离，支持 superseded、verifying、rolled_back 和幂等。
+         安全             冻结数据新鲜度、漂移、有效期、验证容差、重试与回退默认值。                             
+                                                                                  
+         模式             加入 Shadow Mode；形成 Observe → Shadow → Confirm → Autopilot 信任阶梯。
+                                                                                  
+         价值             增加 Backup Hours、预测误差、实际节省和决策质量复盘。                         
+         UX             补齐 Android/iOS、3D 能量流、异常态、无障碍和低性能降级规范。                    
+                                                                                  
+                                                                                  
+         V3.1 的开发原则：Hermes 可以提出“是否值得重规划”，但不能绕过                                    
+         Optimizer、Approval、Safety 和 Executor 直接改变设备。                             
+                                                                                  
+                                                                                  
+        1. 产品定义与目标                                                                
+                                                                                  
+                                                                                  
+                                                                                  
+        光衡是一套运行在   Home Assistant 生态上的家庭能源智能调度系统。它持续理解光伏、储能、负载、电价和天气，             
+        在未来条件变化时主动判断是否值得重规划，并在用户批准后安全改变设备参数。                                      
+                                                                                  
+        核心问题                                                                      
+                                                                                  
+                                                                                  
+         不是“现在电池还有多少”，而是“为了接下来会发生的变化，现在是否值得调整计划？不调整会怎样                            
+         ？调整后能获得什么可验证价值？”                                                         
+                                                                                  
+                                                                                  
+        产品目标                                                                      
+                                                                                  
+         • 把能源数据从展示升级为预测、决策、执行、解释和验证。                                             
+         • 在不把底层功率交给  LLM 自由生成的前提下，体现  Agent 的主动性。                                
+                                                                                  
+         • 让用户清楚看到发生了什么、为什么现在行动、会改变什么、收益和风险是什么。                                   
+                                                                                  
+         • 通过真实读回或同 Schema Replay 证明执行闭环，而不是只展示 UI。                               
+                                                                                  
+        非目标                                                                       
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            2       
+                                                                                  
+
+===== PAGE 3 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+         • MVP 不实现复杂机器学习预测、多  Agent、语音控制、完整用户账号系统和跨家庭云平台。                         
+         • MVP 不承诺支持所有 SOLIX 型号；能力由 Capability Matrix 和运行时探测决定。                   
+                                                                                  
+         • ESP32-S3 终端不承担数值优化、设备执行或审批真相源。                                         
+                                                                                  
+        2. 核心体验与产品原则                                                              
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+          感知   → 发现机会  → 确定性优化  →  决策提案 →  用户批准  →  安全执行  → 状态回读  →  价值验证         
+                                                                                  
+            阶段                   输入 / 动作                       输出                 
+                                                                                  
+         感知        SOLIX、HA、天气、电价、历史负载               标准化 EnergyContext            
+                                                                                  
+         观察        Hermes / Rule Trigger 持续监听变化      OpportunityCandidate         
+         优化        Optimizer 在硬约束内计算                 Plan + plan_hash             
+                                                                                  
+         提案        比较旧计划与新计划                         Decision Proposal            
+                                                                                  
+         确认        App / 终端允许、拒绝或查看原因                Approval Event               
+         安全        重新检查上下文和能力                        ALLOW / DENY + reasons       
+                                                                                  
+         执行        Executor 调用白名单 Adapter            Execution Transaction        
+                                                                                  
+         验证        回读状态并比较目标容差                       Verified / Failed / Rolled back
+         复盘        Baseline 与实际结果比较                  节省、自用率、备电、预测误差               
+                                                                                  
+        冻结原则                                                                      
+                                                                                  
+         • Agent 主动，但所有数值计划可复现。                                                   
+                                                                                  
+         • 真实写入必须绑定 Proposal ID、Plan Hash 和上下文快照。                                 
+         • 批准不是永久授权；关键数据变化、超时或能力变化必须重新确认。                                         
+                                                                                  
+         • 命令返回成功不等于执行成功，必须真实回读。                                                  
+                                                                                  
+         • Mock 和 Replay 必须明确标识，且与 Real 使用完全相同的数据契约。                              
+                                                                                  
+        3. 系统架构与权责边界                                                              
+                                                                                  
+                                                                                  
+                                                                                  
+        V3.1 新增 GuangHeng Control Plane /                                         
+        Backend。它是移动端业务状态与执行事务的唯一可信源，Hermes、Optimizer 和 HA 都通过受控接口协作。             
+                                                                                  
+        Flutter App <-> Control Plane <-> Hermes / Optimizer / Safety / Executor <-> Home Assistant <-> SOLIX
+                                                                                  
+              组件                   职责                        禁止事项                 
+         Flutter App  状态、提案、批准、解释、报表、设备管理           不直接持有 HA 长期令牌；不计算充放电计划        
+                                                                                  
+         Control Plane Schema、事务、审批、日志、推送、WebSocket、Repla 不绕过 Safety 直接写设备        
+                      y                                                           
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            3       
+                                                                                  
+
+===== PAGE 4 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+              组件                   职责                        禁止事项                 
+                                                                                  
+         Hermes Agent 持续观察、机会识别、调用工具、生成可读解释         不自由生成底层功率；不保存审批真相             
+         Energy Optimizer 确定性 24h 数值调度              不负责自然语言和设备写入                  
+                                                                                  
+         Safety Policy 检查权限、能力、数据、SOC、功率、漂移         规则不可由 Hermes 覆盖               
+                                                                                  
+         Executor     幂等执行、重试、回读、回退                 只接受已批准且仍有效的计划                 
+         SOLIX Adapter 屏蔽实体名和型号差异                   上层不得引用具体 entity_id            
+                                                                                  
+         光衡终端         Ambient 展示、提醒和快速批准入口          不运行 Hermes；不形成第二套审批逻辑         
+                                                                                  
+        4. GuangHeng        Control    Plane   / Backend                          
+                                                                                  
+                                                                                  
+                                                                                  
+        MVP 可使用 FastAPI + SQLite/PostgreSQL。比赛只要求单家庭实例，因此不做账号注册；使用                
+        installation_id、home_id 和本地配对码建立设备关系。                                     
+                                                                                  
+               模块                     职责                       P0 输出              
+                                                                                  
+         State Gateway   聚合 HA/SOLIX、天气、电价并标准化         EnergyState / ContextSnapshot
+                                                                                  
+         Agent Orchestrator 接收事件、触发 Hermes 或规则降级       Opportunity / ReplanRequest
+         Plan Service    调用 Optimizer、计算 Hash、版本管理     Plan vN                    
+                                                                                  
+         Proposal Service 创建、去重、过期、替代和审批               ProposalState              
+                                                                                  
+         Execution Service Safety、Adapter、幂等、Verify、Rollback ExecutionState       
+         Notification Service 极光推送、冷却、免打扰、深链           PushReceipt                
+                                                                                  
+         Audit Store     决策、证据、批准、执行、读回、错误             Decision Timeline          
+                                                                                  
+         Scenario Service Real / Mock / Replay 切换和复位   Deterministic Demo         
+                                                                                  
+        最小持久化对象                                                                   
+                                                                                  
+         • home_installation、device_registration、context_snapshot、plan、proposal、approval_event。
+         • execution_transaction、verification_sample、decision_log、baseline_result、push_receipt。
+                                                                                  
+         • 任何状态变化均记录  actor、timestamp、source_mode、request_id 和 previous_state。    
+                                                                                  
+        5. Hermes     Agent    集成规格                                               
+                                                                                  
+                                                                                  
+                                                                                  
+        Hermes 通过 Gateway 订阅 Home Assistant 状态变化，并使用受限工具读取实体或调用光衡后端。HA            
+        长期令牌保存在服务器端环境变量或秘密管理中，不下发到        App。                                    
+                                                                                  
+                工具            允许                     输入 / 输出                      
+                                                                                  
+         get_energy_context 是        读取标准化上下文，不暴露非能源实体                            
+                                                                                  
+         request_replan    是         提交 trigger、evidence、context_snapshot_id      
+         explain_plan      是         只能引用 Proposal 中已存在的证据与数值                     
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            4       
+                                                                                  
+
+===== PAGE 5 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+                工具            允许                     输入 / 输出                      
+                                                                                  
+         create_proposal   间接        由 Control Plane 校验后创建                        
+         apply_energy_plan 否         Hermes 不持有直接执行权限                             
+                                                                                  
+         ha_call_service 任意调用 否      只允许后端白名单 Executor                            
+                                                                                  
+        降级规则                                                                      
+                                                                                  
+         • Hermes 超时 8 秒、离线或返回非结构化结果时，Rule Trigger 可直接调用 Optimizer。               
+                                                                                  
+         • 降级状态显示 agent_status=degraded，但 Proposal、Approval、Safety、Verify 主链仍可完成。 
+         • Hermes 的解释必须绑定 evidence_id；不得补写数据源中不存在的原因。                             
+                                                                                  
+                                                                                  
+        6. SOLIX    赛事官方插件与能力矩阵                                                   
+                                                                                  
+                                                                                  
+                                                                                  
+         术语冻结：PRD   中的“SOLIX 官方插件”指赛事方提供或明确指定的       Home Assistant               
+         插件。开工前必须记录准确名称、仓库、版本、支持型号、地区、账号要求和可写                                     
+         Service。若不能确认，则文案统一改为“赛事提供的       SOLIX 集成”。                             
+                                                                                  
+                                                                                  
+        运行时不得假设所有实体都可写。Adapter   启动时执行 Capability Discovery，并把结果保存为               
+        CapabilitySnapshot。                                                       
+                                                                                  
+               能力               候选 HA 表达           P0 要求          不支持时            
+                                                                                  
+         读取 SOC           sensor               必须            Mock / Replay        
+         读取电池功率           sensor               必须            Mock / Replay        
+                                                                                  
+         读取 PV / Load / Grid sensor            至少 PV、Load    缺失字段标 unavailable    
+                                                                                  
+         设置 Reserve SOC   number / service / script 至少一种可写能力 Mock 执行并清楚标识         
+         设置 Energy Mode   select / service     可选            只读展示                 
+                                                                                  
+         设置充电窗口 / 功率      service / script     视插件能力         降级为 Target SOC / Mode
+         读取在线 / 可写状态      binary_sensor / entity metadata 必须 禁止真实写入               
+                                                                                  
+                                                                                  
+        Entity / Service Map 冻结字段                                                 
+        integration_name、integration_version、device_model、firmware、region、entity_id、domain、unit、writable、service、mi
+        n、max、step、last_verified_at                                               
+                                                                                  
+                                                                                  
+        7. 统一能源数据模型                                                               
+                                                                                  
+                                                                                  
+                                                                                  
+               字段                单位 / 语义                    规则                    
+         battery_soc      %                    0–100；缺失不得以 0 代替                   
+                                                                                  
+         battery_power    kW                   >0 放电；<0 充电                        
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            5       
+                                                                                  
+
+===== PAGE 6 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+               字段                单位 / 语义                    规则                    
+                                                                                  
+         solar_power      kW                   发电功率，始终 ≥0                         
+         home_load        kW                   家庭总负载，始终 ≥0                        
+                                                                                  
+         grid_power       kW                   >0 购电；<0 送电                        
+                                                                                  
+         electricity_price ¥/kWh               必须包含 tariff_slot_id                
+         pv_forecast      kWh[]                按时间片的预测发电量                         
+                                                                                  
+         load_forecast    kWh[]                按时间片的预测用电量                         
+                                                                                  
+         source_mode      real/mock/replay     全链路透传并在 UI 显示                      
+         captured_at      ISO 8601             统一存 UTC，展示按家庭时区                    
+                                                                                  
+         data_quality     good/degraded/stale/missing 影响 Safety 判定                
+                                                                                  
+        功率平衡检查                                                                    
+                                                                                  
+        允许小量测量误差时：solar_power + grid_power + battery_power ≈ home_load。若残差持续超过 max(0.2 kW, home_load ×
+        10%)，标记 data_quality=degraded，并禁止依赖该数据进行高风险写入。                            
+                                                                                  
+        8. 预测模型        MVP                                                        
+                                                                                  
+                                                                                  
+                                                                                  
+             预测                     MVP 方法                       输出               
+                                                                                  
+         PV          天气系数 × 月份 / 时段基础曲线 × 系统容量            每 30 分钟 kWh、置信区间、来源     
+         Load        最近 7 天同星期 / 同小时中位数；无历史使用家庭模板         每 30 分钟 kWh、置信区间        
+                                                                                  
+         Price       分时电价表或 Replay Scenario               每时段购入价、售出价、类型           
+                                                                                  
+         Outage Risk MVP 仅由用户 / Replay 注入                 normal/watch/warning    
+                                                                                  
+        预测结果必须包含   generated_at、valid_from、valid_to、model_version、confidence 和    
+        fallback_used。天气接口异常时使用最近一次有效预测；超过有效期则禁止生成依赖该预测的真实      Proposal。         
+                                                                                  
+        9. Energy    Optimizer     数学定义                                           
+                                                                                  
+                                                                                  
+                                                                                  
+        时间域为未来  24 小时，默认 30 分钟时间片，N=48，Δt=0.5h。所有输入由 ContextSnapshot 锁定，Optimizer 
+        在相同输入与版本下必须返回相同输出。                                                        
+                                                                                  
+        决策变量                                                                      
+                                                                                  
+        P_charge[t] ≥ 0；P_discharge[t] ≥ 0；P_import[t] ≥ 0；P_export[t] ≥ 0；SOC[t] ∈ [0,1]
+                                                                                  
+        SOC  状态转移                                                                 
+                                                                                  
+        SOC[t+1] = SOC[t] + (η_charge × P_charge[t] × Δt / C) - (P_discharge[t] × Δt / (η_discharge × C))
+                                                                                  
+        功率平衡                                                                      
+                                                                                  
+        PV[t] + P_import[t] + P_discharge[t] = Load[t] + P_charge[t] + P_export[t]
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            6       
+                                                                                  
+
+===== PAGE 7 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+        目标函数                                                                      
+                                                                                  
+        min Σt { buy_price[t]×P_import[t]×Δt - sell_price[t]×P_export[t]×Δt + λ_cycle×(P_charge[t]+P_discharge[t])×Δt +
+        λ_peak×PeakImportPenalty[t] + λ_reserve×ReserveViolation[t] + λ_switch×ModeChange[t] }
+        硬约束                                                                       
+                                                                                  
+         • SOC_min ≤ SOC[t] ≤ SOC_max；在指定窗口 SOC[t] ≥ reserve_soc[t]。              
+                                                                                  
+         • 0 ≤ P_charge[t] ≤ device_max_charge；0 ≤ P_discharge[t] ≤ device_max_discharge。
+                                                                                  
+         • 同一时间片不得同时充放电；MVP  可通过二元变量或互斥后处理实现。                                     
+         • 所有设定值按设备 step 取整；取整后再次校验 SOC 和功率平衡。                                    
+                                                                                  
+         • 无可行解时返回 infeasible + reasons，不得构造虚假 Proposal。                          
+                                                                                  
+        策略权重                                                                      
+                                                                                  
+             模式               主要目标                        权重原则                    
+                                                                                  
+         SAVE         最低电费                   成本和峰时购电权重最高，仍遵守用户  Reserve           
+         AUTO         成本、自用率、备电平衡            默认；中等循环惩罚，平衡多目标                      
+                                                                                  
+         BACKUP       停电韧性                   Reserve 违约为极高惩罚，限制套利放电               
+                                                                                  
+        10.  Baseline    与价值计算                                                    
+                                                                                  
+                                                                                  
+                                                                                  
+        Baseline                                                                  
+        不是另一组随意数据，而是在完全相同场景下“不采用本次重规划”的反事实结果。所有对比必须使用同一初始                         
+                                                                                  
+        SOC、设备能力、天气、负载、电价、时间范围和预测版本。                                              
+                                                                                  
+                 指标                                定义                             
+         Energy Cost         Σ(购入电量×购入价 − 送出电量×售出价)                               
+                                                                                  
+         Smart Savings       Baseline Cost − Optimized Cost；小于 0 时必须如实显示          
+                                                                                  
+         Solar Self-use      家庭直接使用 PV + PV 充入电池后自用 / PV 总发电                      
+         Peak Import         高峰电价时间段的电网购电量                                        
+                                                                                  
+         Battery Throughput  Σ(充电量 + 放电量) / 2，用于说明循环代价                            
+                                                                                  
+         Backup Hours        可用电池能量 / 关键负载预测功率；展示假设和范围                            
+         Forecast Error      MAPE / MAE；仅在实际数据到达后计算                               
+                                                                                  
+        展示规则                                                                      
+                                                                                  
+         • 预测价值使用“预计”并展示区间；实际完成后才能显示“实际节省”。                                       
+                                                                                  
+         • 预计节省区间通过 PV / Load 的低、中、高三种情景计算，不伪造统计置信度。                              
+         • 若优化方案增加成本以换取备电，主文案显示“增加约      ¥X，获得约 Y 小时备电”，不能仍标为节省。                  
+                                                                                  
+         • Baseline 和 Optimized 必须记录 algorithm_version、input_hash 和 calculated_at。
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            7       
+                                                                                  
+
+===== PAGE 8 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+        11.  Agent    触发与重规划规则                                                    
+                                                                                  
+                                                                                  
+                                                                                  
+               Trigger            MVP 默认阈值                    动作                  
+         weather_changed  未来 24h PV 预测变化 ≥20%      创建 ReplanRequest               
+                                                                                  
+         tariff_window    距离峰 / 谷窗口 ≤120 分钟        检查当前计划是否需要变化                   
+                                                                                  
+         soc_deviation    实际 SOC 偏离计划轨迹 ≥5 个百分点    重规划                            
+         load_deviation   实际负载连续 10 分钟偏差 ≥30%      重规划或只记录                        
+                                                                                  
+         execution_miss   计划动作开始后未进入目标状态           验证失败并重规划                       
+                                                                                  
+         outage_risk      warning                  提高 Reserve，生成高优先级 Proposal     
+        触发事件必须先去重和冷却。同一原因     30 分钟内只保留一个活动                                       
+                                                                                  
+        Proposal；如果新计划变化不显著，则更新证据但不打扰用户。重大变化定义为      Target SOC ≥5                
+        个百分点、执行窗口变化    ≥30 分钟或预计成本差 ≥¥1。                                          
+                                                                                  
+        12.  Decision    Proposal    数据对象                                         
+                                                                                  
+                                                                                  
+                                                                                  
+                 字段                                说明                             
+                                                                                  
+         proposal_id         唯一 ID，例如 GH-20260917-001                             
+         home_id / source_mode 家庭实例与 real/mock/replay                             
+                                                                                  
+         trigger / priority  触发原因与 proposal/warning/critical                      
+                                                                                  
+         old_plan_id / new_plan_id 前后计划版本                                         
+         plan_hash / context_hash 锁定计划内容和生成时上下文                                   
+                                                                                  
+         change_summary      旧目标 → 新目标、窗口、功率、模式                                   
+                                                                                  
+         evidence[]          值、单位、来源、时间、质量、evidence_id                            
+         estimated_impact    成本区间、自用率、峰时购电、Backup Hours、循环量                       
+                                                                                  
+         do_nothing_impact   不执行会怎样                                               
+                                                                                  
+         uncertainty         预测范围与主要不确定因素                                         
+         expires_at          过期时间，默认创建后 10 分钟或执行窗口前                               
+                                                                                  
+         approval_state      pending/approved/rejected/expired/superseded         
+                                                                                  
+        Proposal                                                                  
+        文案必须回答：发生了什么、为什么现在、改变什么、不执行会怎样、预计价值、主要风险、用户可做什么。                          
+                                                                                  
+                                                                                  
+        13.  Proposal    与   Execution    双状态机                                    
+                                                                                  
+                                                                                  
+                                                                                  
+        Proposal 状态机                                                              
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            8       
+                                                                                  
+
+===== PAGE 9 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+        PENDING → APPROVED | REJECTED | EXPIRED | SUPERSEDED                      
+                                                                                  
+        Execution 状态机                                                             
+        QUEUED → RUNNING → VERIFYING → VERIFIED | FAILED → ROLLED_BACK / ROLLBACK_FAILED
+                                                                                  
+                规则                              冻结要求                              
+                                                                                  
+         并发批准             数据库条件更新：只有 pending 可转 approved；后到请求返回 already_resolved  
+                                                                                  
+         多端同步             App 与终端订阅同一 ProposalState，不建立第二套审批                      
+         新方案替代            旧 Proposal → superseded，并记录 superseded_by               
+                                                                                  
+         用户手动改设备          检测到计划外变化后中止当前  Execution，触发 Safety / Replan             
+                                                                                  
+         重复执行             Executor 使用 idempotency_key=plan_id+action_index        
+         错过窗口             不得补执行；标记 expired/failed 并重新规划                           
+                                                                                  
+        14.  Safety   Policy   与默认阈值                                              
+                                                                                  
+                                                                                  
+                                                                                  
+                检查                   MVP 默认                   失败行为                
+                                                                                  
+         数据新鲜度             核心 Entity ≤30 秒            DENY: stale_context         
+                                                                                  
+         Proposal 有效期      ≤10 分钟且未越过执行窗口             EXPIRED                     
+         SOC 漂移            生成时与执行时差 ≤3 个百分点           SUPERSEDED + Replan         
+                                                                                  
+         价格 / 天气漂移         未超过触发阈值                    Replan                      
+         功率范围              设备 min/max/step 内          DENY: capability_violation  
+                                                                                  
+         SOC 范围            用户和设备上下限交集                 DENY: soc_violation         
+                                                                                  
+         设备状态              online、available、writable  DENY: device_unavailable    
+         服务白名单             只允许冻结 Adapter action       DENY: service_not_allowed   
+                                                                                  
+         Plan / Context Hash 与批准内容完全一致                DENY: plan_drift            
+                                                                                  
+        安全优先级                                                                     
+                                                                                  
+        设备硬限制 > 用户安全限制 > BACKUP Reserve > 已批准计划 > 成本优化。任何下层目标不得覆盖上层约束。            
+                                                                                  
+        回退策略：停止继续写入；优先恢复执行前快照。无法恢复时切换为设备支持的安全           / 自用模式并发送 Critical        
+        通知。                                                                       
+                                                                                  
+        15.  Executor、Adapter          与状态回读                                      
+                                                                                  
+                                                                                  
+                                                                                  
+              步骤                     动作                         记录                
+                                                                                  
+         1. Prepare    读取最新上下文与 CapabilitySnapshot      pre_state                 
+         2. Safety     检查 Proposal、Hash、漂移、范围和在线状态      SafetyDecision            
+                                                                                  
+         3. Apply      按白名单 action 顺序调用 Adapter         request / response        
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            9       
+                                                                                  
+
+===== PAGE 10 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+              步骤                     动作                         记录                
+                                                                                  
+         4. Verify     5–15 秒内轮询目标实体                    verification_samples[]    
+         5. Decide     连续两次读数达到容差则 Verified             verified_at               
+                                                                                  
+         6. Recover    失败最多重试 1 次；仍失败执行回退               rollback_result           
+                                                                                  
+        默认验证容差                                                                    
+                                                                                  
+         • 功率目标：±max(0.1 kW, 目标功率 ×10%)。                                          
+                                                                                  
+         • Reserve SOC / Target SOC 设定值：HA 读回值必须完全等于按 step 取整后的目标。                
+         • 模式切换：目标 select/state 必须一致且保持两个连续采样。                                    
+                                                                                  
+         • 若插件不提供可验证写回字段，该能力不得在    Real 模式标为 Verified，只能标 Applied / Unverifiable。 
+                                                                                  
+        16.  极光推送与无需登录的设备绑定                                                       
+                                                                                  
+                                                                                  
+                                                                                  
+        V3.1 不做账号登录。App 首次启动生成 installation_id，并把极光 Registration ID 注册到 Control   
+        Plane。家庭实例通过一次性配对码或二维码绑定，后端只保存必要的推送标识和设备关系。                               
+                                                                                  
+                对象                              字段 / 规则                           
+                                                                                  
+         DeviceRegistration installation_id、platform、jpush_registration_id、home_id、app_version、last_seen_at
+                                                                                  
+         配对                6 位一次性码；5 分钟过期；使用后立即失效                                 
+         Push Deep Link    guangheng://proposal/{id}；打开后必须重新请求最新状态                
+                                                                                  
+         通知动作              Push 只负责提醒；真正批准必须进入 App 调用 Approval API                
+                                                                                  
+         冷却                同 Proposal 不重复推送；状态变化可更新本地通知                           
+         免打扰               用户自定义时段；Critical 可突破，Proposal 默认不突破                    
+                                                                                  
+         隐私                推送正文默认不包含地址、设备序列号、精确用能习惯                               
+                                                                                  
+        如果极光推送不可用，App   仍通过 WebSocket / 轮询显示 Pending Proposal；比赛 Replay           
+        不能依赖外部推送必然到达。                                                             
+                                                                                  
+        17.  移动端信息架构与跨端规范                                                         
+                                                                                  
+                                                                                  
+                                                                                  
+            一级页面                核心问题                       第一屏内容                  
+                                                                                  
+         首页          现在发生什么？下一步是什么？             3D 能源态、Agent 状态、Next Action、Pending
+                                                Proposal                          
+         策略          为什么这样计划？需要我批准吗？            Proposal、24h Plan、证据、偏好           
+                                                                                  
+         报表          做过什么？结果是否真实？               价值、决策日志、执行验证、日历热力                 
+                                                                                  
+         设备          光衡终端是否正常？                  终端在线、电量、Wi-Fi、固件、IMU/Hall         
+         设置          允许系统自动到什么程度？               自治模式、风险边界、连接与通知                   
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            10      
+                                                                                  
+
+===== PAGE 11 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+        Android / iOS 冻结规范                                                        
+                                                                                  
+         • Android 最小点击区 48dp，iOS 最小点击区 44pt；适配 Safe Area 与底部手势区。                 
+         • 支持系统字体放大至  130%；关键数值不能截断，必要时换行而非缩小到不可读。                                
+                                                                                  
+         • 状态不能只靠红绿表达，必须同时使用图标、文字和形状。                                             
+                                                                                  
+         • 3D 场景低性能降级为静态等距图；信息和交互能力不降级。                                           
+         • 所有等待、离线、空数据、过期、失败、部分成功和     Mock 状态都有明确页面表现。                           
+                                                                                  
+                                                                                  
+        18.  首页与      3D  家庭能源中心                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+        3D 房屋是实时能源拓扑，不是装饰图。每个节点既显示数据，也明确可点击；能量线路必须由实时功率方向和大小驱                     
+        动。                                                                        
+                                                                                  
+             节点              标注                  交互              能量线逻辑            
+         光伏屋顶        当前 kW、今日 kWh、预测变化    点击查看预测             PV>0                 
+                                                             时从屋顶流向家庭/电池/电网       
+                                                                                  
+         家庭          实时负载 kW              点击查看负载趋势           按输入来源汇入              
+                                                                                  
+         储能          SOC、充/放电 kW、状态       点击查看 Reserve / Backup Hours 充电流入、放电流出   
+         电网          购/售电 kW、当前电价         点击查看电价             购电流入、送电流出            
+                                                                                  
+         • 功率绝对值 <0.05 kW 时停止动画并显示 0；数据 stale 时线路变灰。                              
+                                                                                  
+         • Proposal 将改变哪个节点，就高亮该节点并显示“将调整”标签。                                     
+         • 拖动旋转 3D；单击热点进入详情；首次使用用一次性引导说明可交互区域。                                    
+                                                                                  
+         • 禁止在线路上显示与数据无关的装饰性运动。                                                   
+                                                                                  
+        19.  策略页：Agent          Control    Center                                 
+                                                                                  
+                                                                                  
+                                                                                  
+           顺序            模块                           信息                          
+                                                                                  
+         1       Agent 状态           观察中 / 重规划 / 等待确认 / 执行 / 降级                    
+         2       Decision Proposal  45%→75%、原因、不执行后果、收益区间、批准                      
+                                                                                  
+         3       当前 24h Plan        充电、光伏、自用、放电、Reserve 时间片                       
+                                                                                  
+         4       决策证据               天气、电价、SOC、负载、PV；带来源和时间                        
+         5       策略偏好               SAVE / AUTO / BACKUP 和用户约束                    
+                                                                                  
+         6       版本历史               为什么 Replan、哪个 Proposal 替代了谁                   
+                                                                                  
+        批准按钮只有在   Proposal=pending、数据新鲜且 Capability                               
+        可执行时可用；否则显示具体原因。批准成功后立即显示       Plan ID、执行状态和进度，不能只弹  Toast。              
+                                                                                  
+        20.  报表、日历与决策复盘                                                           
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            11      
+                                                                                  
+
+===== PAGE 12 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+                                                                                  
+        报表必须同时证明经济价值、清洁价值、备电价值和       Agent 的可追踪性。日期选择使用兼容  Android/iOS           
+        的成熟日历组件，颜色保持克制。                                                           
+                                                                                  
+                 模块                                内容                             
+                                                                                  
+         费用日历                每天电费点标；低于个人基准用柔和绿色，高于基准用柔和红色，选中日期显示金额与原因             
+                                                                                  
+         Baseline vs Optimized 预计 / 实际成本、自用率、峰时购电、循环量、结束 SOC                      
+         Decision Log        Agent 发现的机会与证据                                       
+                                                                                  
+         Approval Log        批准、拒绝、过期、被替代                                         
+         Execution Verification 真实回读、容差、失败与回退                                     
+                                                                                  
+         Forecast Review     预测与实际偏差，解释节省落差                                       
+                                                                                  
+         Resilience          Backup Hours 与关键负载假设                                 
+                                                                                  
+        日历颜色不是绝对金额固定阈值，而是相对用户近       30 天同类日期基准：≤80% 基准为低支出，80%–120%              
+        为正常，>120% 为高支出。无数据为灰色，选中态使用蓝色描边，避免整月红绿拥挤。                                 
+                                                                                  
+        21.  Shadow     Mode     与自治信任阶梯                                          
+                                                                                  
+                                                                                  
+                                                                                  
+             Observe   →      Shadow    →      Confirm    →     Autopilot         
+                                                                                  
+                                                                                  
+             模式                      行为                        进入条件               
+                                                                                  
+         Observe      只展示和解释，不生成可执行提案                   默认调试 / 数据接入期              
+                                                                                  
+         Shadow       生成计划但不执行，对比用户实际结果                 数据质量稳定                    
+         Confirm      主动提案，用户批准后执行                      MVP 默认正式模式                
+                                                                                  
+         Autopilot    白名单低风险动作自动执行，重大动作仍确认              P2；需足够历史可靠性               
+                                                                                  
+        Shadow 周报至少包含提案数、有效提案数、预计节省、按实际数据回算的节省、预测误差和用户拒绝偏好。自治升                    
+        级必须由用户主动确认，不能自动开启。                                                        
+                                                                                  
+        22.  Backup    Hours、偏好学习与扩展创新                                            
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+        Backup Hours                                                              
+        可用备电量 = max(0, 当前 SOC − 最低保护 SOC) × 电池可用容量 × 放电效率。Backup Hours = 可用备电量 /  
+        关键负载预测功率。展示结果时必须说明关键负载清单和预测范围。                                            
+                                                                                  
+        用户拒绝原因                                                                    
+                                                                                  
+         • 不想增加电池循环；收益太低；今晚可能临时用电；需要更多备电；暂时不信任自动控制。                               
+                                                                                  
+         • 系统只把选择转换为结构化偏好，不让    LLM 自由修改硬安全边界。                                    
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            12      
+                                                                                  
+
+===== PAGE 13 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+        后续扩展接口                                                                    
+                                                                                  
+         • FlexibleLoad：电动车、热水器、热泵、空调、洗衣机、智能插座。                                   
+         • CarbonSignal：碳强度作为可选优化项，不影响 P0。                                        
+                                                                                  
+         • DemandResponse：需求响应 / 虚拟电厂事件，必须单独授权。                                   
+                                                                                  
+         • Natural Language Intent：把“今晚优先备电”等意图转为结构化约束。                           
+                                                                                  
+        23.  API  契约与安全                                                           
+                                                                                  
+                                                                                  
+                                                                                  
+           Method              Path                         说明                    
+         GET      /v1/energy/state              最新标准化 EnergyState                 
+                                                                                  
+         GET      /v1/agent/state               AgentState 与服务健康                  
+                                                                                  
+         GET      /v1/plans/current             当前 24h Plan                       
+         GET      /v1/proposals/pending         当前待确认 Proposal                    
+                                                                                  
+         POST     /v1/proposals/{id}/approve    批准；携带 plan_hash、idempotency_key   
+                                                                                  
+         POST     /v1/proposals/{id}/reject     拒绝；可选结构化原因                        
+         POST     /v1/optimizer/replan          内部接口；传 context_snapshot_id        
+                                                                                  
+         POST     /v1/executions/{plan_id}/apply 内部 Executor 接口                   
+                                                                                  
+         GET      /v1/executions/{id}           执行与验证状态                           
+         POST     /v1/devices/register          installation_id + 极光 Registration ID
+                                                                                  
+         POST     /v1/scenarios/{id}/play       仅 Demo / Debug 环境                 
+                                                                                  
+        安全基线                                                                      
+                                                                                  
+         • 生产 / Demo 环境分离；Scenario API 在真实环境关闭。                                   
+                                                                                  
+         • HA Token、极光 App Secret、插件凭据只保存在服务器端；日志不得打印秘密。                          
+         • App 使用配对后签发的设备令牌；即使无账号，也必须防止任意设备批准      Proposal。                      
+                                                                                  
+         • 所有写接口 HTTPS；关键请求记录 request_id、installation_id、IP 摘要和结果。                
+                                                                                  
+         • 设备令牌可撤销；解绑后立即停止推送和审批权限。                                                
+                                                                                  
+        24.  Real  / Mock     / Replay   统一方案                                     
+                                                                                  
+                                                                                  
+                                                                                  
+             模式               用途                          要求                      
+         Real        真实 HA / SOLIX         显示 Real；只使用已探测能力；真实回读                  
+                                                                                  
+         Mock        无实机开发                 同 Schema；可模拟成功、失败、离线和延迟                
+                                                                                  
+         Replay      比赛稳定演示                固定场景、固定结果、一键复位、可暂停                     
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            13      
+                                                                                  
+
+===== PAGE 14 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+        主  Replay 场景                                                              
+                                                                                  
+        晴天基线 → 天气切换阴天 → PV Forecast -37% → Hermes 触发 Replan → Target SOC 45%→75% → 用户批准 → Safety Allow →
+        Adapter Apply → 5 秒后读回 → Verified → Baseline 对比                           
+        Replay 必须同时准备四个异常分支：Proposal 过期、SOC 漂移、设备离线、读回失败。评委点击任一分支时能看到             
+        Safety 或 Verify 的真实行为。                                                    
+                                                                                  
+                                                                                  
+        25.  核心比赛       Demo                                                      
+                                                                                  
+                                                                                  
+                                                                                  
+             时间                    画面 / 动作                    评委应理解               
+         0:00–0:30   首页 3D 房屋和当前状态；Agent 正在观察           产品不是静态仪表盘                 
+                                                                                  
+         0:30–1:10   晴转阴，PV -37%；Agent 自动 Replan        外部变化触发主动决策                
+                                                                                  
+         1:10–2:00   Proposal：45%→75%、原因、不执行后果、价值区间     决定可解释、可选择                 
+         2:00–2:40   用户批准；Safety 二次检查；执行进度              AI 没有绕过用户和安全              
+                                                                                  
+         2:40–3:10   5 秒读回，显示 Verified 和证据              不是只返回 200                 
+                                                                                  
+         3:10–4:00   报表展示 Baseline、节省、Backup Hours、时间线  价值可以验证                    
+         4:00–5:00   可选终端 Lift-to-Explain / 异常 Safety 分支 实体陪伴与系统韧性                
+                                                                                  
+        一句话叙事：光衡不是等用户下指令的能源助手，而是持续观察未来、主动提出可验证方案，并在用户批准和安全校                       
+        验后完成真实执行的家庭能源    Agent。                                                   
+                                                                                  
+                                                                                  
+        26.  MVP    验收标准                                                          
+                                                                                  
+                                                                                  
+                                                                                  
+          #        验收项                            通过条件                            
+         1    状态             App 展示 PV、Load、SOC、Battery/Grid Power，单位和符号一致        
+                                                                                  
+         2    Agent          至少一个上下文变化自动触发判断；Hermes 失败可降级                         
+                                                                                  
+         3    Optimizer      同输入返回同 24h 计划；满足全部硬约束                                
+         4    Baseline       同场景公平计算；可解释每项差值                                      
+                                                                                  
+         5    Proposal       包含 Hash、证据、旧/新计划、不执行后果、价值区间、过期时间                     
+                                                                                  
+         6    Approval       未经批准无法真实执行；并发批准只成功一次                                 
+         7    Safety         过期、stale、越界、漂移、离线至少各有可复现阻断测试                         
+                                                                                  
+         8    Adapter        Real 或同 Schema Mock 接收计划；能力不足可正确降级                   
+                                                                                  
+         9    Verify         回读并显示 Verified / Failed / Unverifiable；保留样本          
+         10   推送             极光推送可打开对应 Proposal；批准仍从 App 完成                       
+                                                                                  
+         11   报表             展示 Decision、Approval、Execution、Baseline 和预测复盘        
+                                                                                  
+         12   Replay         一键复位；连续演示结果一致；明显标识  Replay                           
+         13   跨端             Android/iOS 无溢出；Safe Area、字体缩放、触控区合规                 
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            14      
+                                                                                  
+
+===== PAGE 15 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+          #        验收项                            通过条件                            
+                                                                                  
+         14   3D             可旋转、热点可点击、数据有标注、线路方向符合实时功率                           
+                                                                                  
+        27.  24  小时开发计划与优先级                                                       
+                                                                                  
+                                                                                  
+                                                                                  
+            时间              重点                           交付                       
+         0–2h       接口冻结                 Schema、Capability Map、Scenario、UI 数据契约   
+                                                                                  
+         2–5h       Optimizer / Baseline 确定性计划、45→75、价值指标                         
+                                                                                  
+         5–8h       Control Plane / HA   State、Adapter、Mock/Replay、日志             
+         8–11h      Hermes               Gateway、触发、工具、降级                         
+                                                                                  
+         11–16h     Flutter              首页、策略、报表、跨端适配                            
+                                                                                  
+         16–19h     Approval / Safety / Verify 双状态机、门禁、读回、回退                      
+         19–21h     推送 / 终端              极光推送；终端按进度决定                             
+                                                                                  
+         21–23h     集成                   主 Demo、异常分支、Plan Morph                   
+                                                                                  
+         23–24h     冻结                   回归、录屏、数据校验，不再加功能                         
+                                                                                  
+        P0 / P0.5 / P1                                                            
+                                                                                  
+             级别                               范围                                  
+                                                                                  
+         P0         Control Plane、EnergyState、Hermes/Rule                         
+                    Trigger、Optimizer、Baseline、Proposal、Approval、Safety、Adapter、Verify、Replay、App 主链
+         P0.5       极光推送、Future Alert、3D Plan Morph、光衡终端、Lift-to-Explain、Magnetic Context
+                                                                                  
+         P1         Shadow 周报、偏好学习、实际预测复盘、更多异常恢复                                  
+         P2         Autopilot、FlexibleLoad、多家庭、账号体系、需求响应                          
+                                                                                  
+                                                                                  
+        28.  风险、容灾与现场检查                                                           
+                                                                                  
+                                                                                  
+                                                                                  
+               风险                影响                      V3.1 对策                  
+         SOLIX 写能力不足     不能完成目标动作            Capability Discovery；降级到支持的 Target SOC /
+                                             Mode；Replay                          
+                                                                                  
+         Hermes 不稳定      主动链中断               Rule Trigger 直连 Optimizer；显示 degraded
+         HA / 网络中断       数据与执行失败             stale 检查；禁止写入；本地状态提示                 
+                                                                                  
+         LLM 输出漂移        解释和触发不可复现           结构化工具；数值来自 Optimizer；证据 ID           
+                                                                                  
+         用户批准后变化         旧方案不安全              Context Hash、漂移阈值、Safety Recheck     
+         推送不到达           用户没看到 Proposal      WebSocket/轮询兜底；比赛不依赖推送               
+                                                                                  
+         3D 性能           卡顿或崩溃               静态等距图降级；数据卡保持可用                      
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            15      
+                                                                                  
+
+===== PAGE 16 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+               风险                影响                      V3.1 对策                  
+                                                                                  
+         硬件延期            终端 Demo 缺失          终端 P0.5；App 主闭环独立成立                  
+                                                                                  
+        现场  Go / No-Go                                                            
+                                                                                  
+         • 主场景连续运行 5 次，结果一致且无手工修数据。                                               
+         • 断开 Hermes 后主链仍能通过 Rule Trigger 演示。                                     
+                                                                                  
+         • Real、Mock、Replay 标识始终可见，现场口径一致。                                        
+                                                                                  
+         • 准备一段完整录屏作为网络或插件不可恢复时的最终兜底。                                             
+                                                                                  
+        29.  开发前冻结清单                                                              
+                                                                                  
+                                                                                  
+                                                                                  
+               必须冻结                              完成定义                             
+         SOLIX 插件          名称、版本、来源、型号、地区、账号、读写能力                                 
+                                                                                  
+         Entity Map        实体、单位、符号、更新时间、可写服务、范围和  step                           
+                                                                                  
+         Schema            Energy / Agent / Plan / Proposal / Execution / Terminal
+         Optimizer         版本、公式、权重、约束、无解、取整                                      
+                                                                                  
+         Baseline          策略、周期、指标、公平比较规则                                        
+                                                                                  
+         State Machine     状态、合法迁移、并发、幂等、替代、回退                                    
+         Safety            阈值、错误码、优先级、验证容差                                        
+                                                                                  
+         Push              极光项目、包名、Registration ID、深链、免打扰                         
+                                                                                  
+         Scenario          主流程、异常分支、复位和固定数据                                       
+         UI Contract       页面字段、异常态、颜色、3D 交互和跨端规范                                 
+                                                                                  
+         只有上述清单完成，才进入全量      UI 开发。否则最容易返工的不是视觉，而是                                
+                                                                                  
+         Proposal、执行状态和数据含义。                                                      
+                                                                                  
+        30.  最终产品叙事                                                               
+                                                                                  
+                                                                                  
+                                                                                  
+        Hermes 持续观察家庭能源环境，发现什么时候值得重新规划；Optimizer                                  
+                                                                                  
+        把天气、电价、光伏和负载转化为确定性的      24 小时计划；Control Plane                            
+        锁定计划、证据和审批；用户只在真实设备将被改变前收到清楚的        Decision Proposal；批准后由 Safety        
+        Policy、Executor、Home Assistant 和 SOLIX 完成安全执行，并通过状态回读验证结果。光衡 App          
+        与光衡终端让整个过程随时可见、可理解、可干预。                                                   
+                                                                                  
+                                                                                  
+                  评委记忆点                              证明方式                         
+                                                                                  
+         不是等待指令的聊天机器人              外部天气变化自动触发 Replan                              
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            16      
+                                                                                  
+
+===== PAGE 17 =====
+
+                                                                                  
+                                                                                  
+       光衡 | PRD V3.1 | Development Freeze                     Autonomous Energy Agent
+                                                                                  
+                                                                                  
+                  评委记忆点                              证明方式                         
+                                                                                  
+         LLM 不乱算功率                 Optimizer 公式、Plan Hash、确定性结果                   
+         AI 不越权                    Proposal、用户批准、Safety 二次检查                      
+                                                                                  
+         不是假执行                     SOLIX / HA 状态真实读回和容差验证                         
+                                                                                  
+         不是只展示数据                   Baseline、实际结果、Backup Hours、预测复盘                
+         可以逐步建立信任                  Observe → Shadow → Confirm → Autopilot         
+                                                                                  
+         实体终端有意义                   Energy Clock、Lift-to-Explain、同一审批状态            
+                                                                                  
+                                                                                  
+                                                                                  
+         一句话收尾：光衡让家庭能源系统不只看见现在，而是理解未来、主动提出选择，并对每一次真实行动                            
+         负责。                                                                      
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                               — PRD V3.1 Development Freeze End —                
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+                                                                                  
+       Home Assistant × Anker SOLIX × Hermes Agent × Optimizer            17      
+                                                                                  

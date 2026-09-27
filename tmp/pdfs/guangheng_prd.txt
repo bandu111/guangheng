@@ -1,0 +1,699 @@
+=== PAGE 1 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+光衡
+家庭能源 Autopilot
+Home Assistant × Anker SOLIX × MCP × ESP32-S3
+产品一句话
+让家庭储能从执行固定规则，升级为理解未来变化、主动规划下一度电，并把决策变成可见、可感、可解
+释体验的智能能源系统。
+版本 状态 赛道 目标
+V2.0 完整修订版 充电储能
+24 小时可演示 MVP + 感知硬件
+亮点
+本版本基于 V1.0 全量修订：项目名统一为“光衡”，移动端改为 Android + iOS，修正 App 设备页语义，重构“光衡终
+端”定位，并加入自动场景感知与 GuangHeng Sense 感知交互层。
+
+=== PAGE 2 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+0. V2.0 纠错与重构摘要
+本次修订原则
+不改变赛题主线：核心仍是 Home Assistant + Anker SOLIX 的预测、决策、执行、解释与验证闭环。所有
+硬件创新都服务于“增强感知”，而不是把终端做成第二个手机或第二个储能设备。
+V1.0 问题 / 易误解点 V2.0 修正
+整体项目名仍为 Energy Dial 整体项目统一为“光衡”；硬件单独称“光衡终端”
+Flutter 优先 Windows + Android
+开发目标改为 Android + iOS；Windows 仅作为开发电脑，不开
+发桌面客户端
+设备页曾混入太阳能输入、家庭负载、家庭储能等系统数据
+App 设备页只管理光衡终端自身：在线、电量、Wi-Fi、同步、终
+端设置；家庭能源数据留在首页
+Home Assistant / SOLIX 在设备页成为主要内容 移动到“设置 -> 系统连接”，设备页主角只保留光衡终端
+硬件像“缩小版 App”
+硬件重构为 Ambient / Glance Interface：抬眼即见、事件主动提
+醒、快速意图输入
+桌面 / 随身 / 磁吸被误解为 App 可选模式 改为硬件自动感知的 Device Context，不在 App 提供手动选择
+SAVE / AUTO / BACKUP 与设备使用状态概念混淆
+明确为“家庭能源策略模式”，是用户能源意图，与设备场景状
+态完全独立
+缺少硬件独有价值
+增加 Energy Aura、Energy Clock、Haptic Language、Lift-to-
+Explain、Plan Morph、Future Alert、What-if Peek、Energy 
+Handoff
+设置页缺少权限治理
+新增 App 权限管理、通知与预警、终端设置、系统连接等二级设
+置模块
+0.1 术语冻结
+术语 定义 不要混淆
+光衡 整个家庭能源智能调度系统 不是单指硬件
+光衡 App Android / iOS 深度管理与解释界面 负责完整状态、策略、报表、设置
+光衡终端 ESP32-S3 随身 / 桌面 / 磁吸实体 不是储能电池，不直接承担家庭功率执行
+
+=== PAGE 3 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+Companion
+家庭能源策略模式 SAVE / AUTO / BACKUP
+用户可主动切换，影响 Optimizer / SOLIX 
+调度
+Device Context Desktop / Portable / Magnetic
+硬件自动判断，只改变终端交互与显示，
+不改变能源策略
+GuangHeng Sense 光衡的实体感知交互层 把后台决策转化为视觉、触觉和场景反馈
+
+=== PAGE 4 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+1. 产品定义
+光衡是一套运行在 Home Assistant 生态上的家庭能源智能调度系统，由 Flutter App、Home Assistant、
+Energy Brain、MCP 能力层、Energy Optimizer、Anker SOLIX 官方集成和 ESP32-S3 光衡终端组成。
+核心不是“看电量”
+系统要回答：现在这一度电应该存着、用掉，还是为未来留着？随后将可验证的计划写入 SOLIX，并让用
+户在 App 和光衡终端上理解“为什么这样做、未来会怎样、这样做值不值得”。
+1.1 核心闭环
+阶段 输入 / 动作 输出
+感知 SOLIX SOC / 功率、电价、天气、家庭负载 当前能源上下文
+预测 未来电价、光伏条件、基础负载趋势 未来 24h 约束
+决策 Energy Brain 选择优化目标 SAVE / AUTO / BACKUP
+优化 Optimizer 计算确定性充放电计划 时间、功率、Reserve SOC
+执行 Home Assistant -> SOLIX 官方集成 设备状态改变
+解释 App + 光衡终端展示证据与变化 为什么这样做 / 预计节省多少
+感知增强
+GuangHeng Sense 将变化转为光、触觉、
+姿态交互
+用户不打开 App 也能感知重要事件
+验证 Baseline vs Optimized 成本、自用率、备电结果
+1.2 24 小时 Hackathon 核心目标
+ App 能在 3 秒内表达当前家庭能源状态。
+ 系统能生成并解释未来 24 小时策略。
+ 策略通过 Home Assistant 进入 SOLIX 控制链路，或使用同 Schema 的 Mock / Replay 证明闭环。
+ App 和光衡终端共享同一 energy_mode 与策略结果。
+ 光衡终端不复制 App，而是用 GuangHeng Sense 增强用户对能源决策的感知。
+ 用同场景 Baseline vs Optimized 证明策略价值。
+
+=== PAGE 5 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+1.3 V2.0 非目标
+ 用户长期行为学习或“AI 已学习你的习惯”。
+ 强化学习 / 神经网络负载预测。
+ 多家庭、多用户复杂权限体系。
+ 游戏化、NPC、Flame。
+ EV 充电。
+ 复杂全屋设备联动。
+ 多 Agent 系统。
+ 重写 Anker SOLIX 底层协议。
+ 把光衡终端做成完整手机 App 的缩小版。
+
+=== PAGE 6 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+2. 赛题理解与用户问题
+家庭储能面对的是一个未来决策问题：天气、电价、光伏与家庭负载持续变化，固定时段规则无法长期保持最
+优。光衡的价值不止是“自动执行”，而是让系统能够根据未来变化提前行动，并把这种行动解释清楚。
+核心矛盾
+传统自动化回答“到点做什么”；光衡回答“为了即将发生的事情，现在应该做什么”。
+2.1 目标用户
+已经拥有或计划使用阳台光伏 / 家庭储能，并处于峰谷或动态电价环境，希望降低电费、提高光伏自用率与备
+电安全，但不愿每天手动调整充放电策略的家庭用户。
+2.2 四个关键痛点
+痛点 表现 光衡回应
+数据有了，决策仍靠人
+SOC、PV、Load 可见，但用户仍需自己判
+断何时充、何时放
+Optimizer 生成可执行 24h 计划
+固定规则无法适应未来变化
+晴转阴、连续阴雨、动态电价会改变最佳
+策略
+Weather / Tariff Context 触发 Replan
+自动化缺乏解释 用户不知道为什么突然充电 / 放电 App 与终端给出证据和前后变化
+后台决策缺乏感知 只有主动打开 App 才能发现策略变化
+GuangHeng Sense 用光、触觉和抬起交互
+主动呈现重要变化
+2.3 为什么还需要硬件
+App 与硬件不是竞争关系
+App 用来深度管理能源；光衡终端负责“抬眼即见、变化可感、随手可控”。硬件位于手机之前的感知
+层：先让用户意识到值得关注的变化，需要深入理解时再进入 App。
+光衡 App 光衡终端
+完整能源 Dashboard Ambient 状态感知
+详细策略证据与 24h 计划 Energy Clock 快速看未来
+
+=== PAGE 7 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+完整 Baseline / 报表分析 What-if Peek 快速证明价值
+设置、权限、系统连接 触觉提醒、Lift-to-Explain
+深度管理 快速 SAVE/AUTO/BACKUP 意图输入
+
+=== PAGE 8 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+3. 产品功能范围
+模块 优先级 功能目标
+首页 P0
+实时能源概览 + 3D 家庭能源视图 + 今日曲
+线
+策略 P0
+当前策略、证据、24h 计
+划、SAVE/AUTO/BACKUP
+报表 P0
+今日 / 本周、Baseline vs Optimized、节
+省趋势
+设备 P0
+只管理光衡终端：在线、电量、Wi-Fi、同
+步、终端设置
+设置 / 权限 P0
+App 权限状态、通知与预警、终端基础设
+置
+系统连接 P1
+Home Assistant / SOLIX 连接状态，位于
+设置二级页
+GuangHeng Sense P0/P0.5
+Energy Clock、Haptic、Lift、Morph、
+Aura、Future Alert、What-if、Handoff
+MCP / Optimizer P0 读取上下文，输出确定性 24h 调度方案
+3.1 一级导航
+一级页面 核心问题
+首页 家里现在发生什么？
+策略 系统接下来准备怎么做？为什么？
+报表 这个策略到底创造了多少价值？
+设备 我的光衡终端现在是否正常？
+3.2 首页 Main
+ 天气：当前天气与温度。
+ 3D 家庭能源模型：只展示房屋、屋顶光伏与家庭储能设备，不展示汽车等无关对象。
+
+=== PAGE 9 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+ 实时标签：光伏功率（kW）、家庭功率（kW）、家庭储能 SOC（%）与充放电状态。
+ 累计指标：今日发电（kWh）、今日用电（kWh）、今日节省（¥）。
+ 今日曲线：光伏 / 家庭 / 电池随时间变化。
+ 3D 采用预渲染 PNG/WebP + Flutter 动态标注 / 能量线，不做实时 3D 引擎。
+单位规范
+实时功率统一使用 kW（必要时小功率可用 W）；累计电量使用 kWh；家庭储能使用 SOC %；成本使用 ¥ 
+或 ¥/kWh。终端自身电池也使用 %，必须通过文案“终端电量”与家庭储能 SOC 区分。
+3.3 策略 Strategy
+ 当前策略：例如“高峰放电”。
+ 执行窗口：例如 18:00-21:00。
+ Reserve SOC：最低备用电量。
+ 预计节省：基于同一场景的策略仿真。
+ 决策证据：电价、当前 SOC、负载趋势、天气 / 光伏条件。
+ 24 小时计划：低价充电 / 光伏优先 / 高峰放电 / 备用保留。
+3.4 三种家庭能源策略模式
+模式 优化目标 主要行为
+省钱 SAVE 最小化购电成本
+更积极利用低谷充电 / 高峰放电；较低备
+用权重
+自动 AUTO 成本 + 光伏 + 备用综合平衡 默认模式；上下文变化时动态重规划
+备电 BACKUP 提高备用能源安全 提高最低 SOC；减少套利放电
+重要区分
+SAVE / AUTO / BACKUP 是“家庭能源策略模式”，用户可主动切换；Desktop / Portable / Magnetic 
+是“设备场景状态”，由硬件自动判断。两者绝不共用 UI 文案或状态字段。
+3.5 报表 Reports
+ 今日 / 本周；本月可做占位或 Mock。
+ 总用电、光伏自用率、电网购电、智能节省。
+ 固定策略 Baseline vs 光衡智能策略。
+
+=== PAGE 10 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+ 节省趋势使用同场景 A/B 数据，不承诺固定节省比例。
+ What-if 对比字段与硬件 What-if Peek 共用同一数据源。
+
+=== PAGE 11 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+4. App 设备页与设置模块
+本章是 V2.0 的重点纠错：App“设备”页不再展示太阳能输入、家庭负载、家庭储能 SOC 等家庭能源系统数
+据。这些属于首页。设备页只回答“光衡终端本身是否正常”。
+4.1 设备 Device
+区域 内容 说明
+终端主卡 光衡终端、在线 / 离线、设备图片 主角只能是自有终端
+连接状态 Wi-Fi、最近同步 终端通信状态
+终端状态
+终端电量、设备温度（若可取）、存储/基
+础健康（可选）
+不展示家庭储能 SOC
+当前能源策略
+AUTO / SAVE / BACKUP，只读摘要 + 跳转
+策略页
+不称“设备运行模式”
+快捷设置 亮度、震动反馈、息屏行为等 只改变终端体验，不改变 SOLIX 策略
+详情 设备编号、固件版本、最近同步 Demo 可使用固定值
+明确禁止
+设备页不得出现“太阳能输入”“家庭负载”“家庭储能 78%”并让用户误以为这些是终端自身传感器数
+据。若需要展示家庭能源，应跳转首页或策略页。
+4.2 设置 Settings
+设置入口 P0/P1 内容
+权限管理 P0
+通知、本地网络、蓝牙（配网需要时）、
+后台刷新；位置 / 相机仅在真实功能需要
+时请求
+通知与预警 P0 策略重算、异常、Future Alert 开关
+终端设置 P0 亮度、震动强度、自动息屏、设备名称
+系统连接 P1 Home Assistant / Anker SOLIX 连接状态
+策略偏好 P1 默认能源策略、备用 SOC 偏好；核心模式
+
+=== PAGE 12 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+仍在策略页
+关于光衡 P0 版本、Demo 信息、隐私 / 服务说明
+4.3 App 权限管理原则
+ 最小权限：没有真实功能需求就不申请权限。
+ 通知：用于策略重算、异常、Future Alert；用户可随时关闭。
+ 本地网络：仅在手机需要发现 / 连接 Home Assistant 或光衡终端时启用。
+ 蓝牙：仅用于终端首次配网 / 绑定时的可选路径；若 P0 只走 Wi-Fi，则不申请。
+ 定位：不作为产品核心权限；仅在特定系统版本的蓝牙 / 网络发现确实要求时说明原因并请求。
+ 相机：只有引入二维码配网时才请求。
+ 权限页职责：显示系统授权状态、跳转系统设置，不伪造权限状态。
+
+=== PAGE 13 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+5. Energy Brain、MCP 与 Optimizer
+设计原则
+LLM 不直接计算“放 763W”或自由构造低层指令。AI / MCP 负责理解上下文、选择目标与解释；
+Optimizer 负责确定性数值调度；Safety Policy 负责硬约束。
+5.1 MCP 能力层
+能力 职责 Hackathon
+Home Assistant Context / MCP
+读取 SOC、功率、实体状态；调用受控能
+力
+P0
+Weather Context 天气、光伏条件、恶劣天气信号 P0（API 或固定场景）
+Tariff Context 当前 / 未来电价时段 P0
+Energy Optimizer Tool 生成 24h 充放电计划 P0
+GuangHeng Intent Context SAVE / AUTO / BACKUP 用户意图 P0
+Calendar / Household Context 家庭事件 P2，不进入 24h 核心
+5.2 策略算法 MVP
+ 第一版使用时间片离散 + 规则约束 / 简单优化，不追求强化学习。
+ 输入：初始 SOC、容量、最大充放电功率、效率、最低 / 最高 SOC。
+ 时间片：30 分钟或 1 小时，共 24-48 个 slot。
+ 成本：GridImport(t) × Price(t)。
+ 约束：SOC 边界、功率上限、BACKUP 最低 SOC。
+ AUTO：成本 + 光伏自用 + 备用惩罚；SAVE：成本权重最高；BACKUP：备用 SOC 权重最高。
+5.3 不做“使用习惯学习”
+ 有历史数据：最近 7 天同一小时平均 / 中位数。
+ 无历史数据：预设家庭负载模板 + 当前负载修正。
+ UI 只写“预计晚间负载上升”，不写“AI 已学习你的习惯”。
+5.4 Safety Policy
+ SOC 不低于策略最低值。
+
+=== PAGE 14 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+ 充放电功率不超过设备能力。
+ 异常 / 数据缺失时停止自动写入并回退安全状态。
+ 高风险写操作进入白名单；LLM 不直接构造底层控制命令。
+ 设备场景状态（Desktop / Portable / Magnetic）不得直接改变家庭能源策略。
+
+=== PAGE 15 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+6. 数据模型与接口字段
+V2.0 将“家庭能源数据”“终端自身状态”“自动场景状态”分开建模，防止 UI 和业务语义混淆。
+6.1 EnergyState
+字段 类型 / 单位 来源 用途
+battery_soc % SOLIX / HA 家庭储能核心状态
+battery_power kW SOLIX / HA 充放电反馈
+solar_power kW SOLIX / HA 实时光伏
+home_load kW HA / SOLIX 家庭实时负载
+grid_power kW HA / SOLIX 购电 / 馈电（可用时）
+electricity_price ¥/kWh Tariff 成本优化
+weather_code enum Weather 天气上下文
+pv_forecast kWh Weather / Forecast 光伏预测
+energy_mode enum App / Terminal SAVE / AUTO / BACKUP
+reserve_soc % Optimizer 最低备用电量
+strategy_slots array Optimizer 24h 计划
+estimated_cost ¥ Simulator 优化策略成本
+baseline_cost ¥ Simulator 固定策略成本
+6.2 TerminalState
+字段 类型 / 单位 说明
+terminal_online bool 光衡终端在线状态
+terminal_battery %
+终端自身锂电池电量，必须与家庭储能 
+SOC 区分
+wifi_status enum connected / connecting / disconnected
+last_sync_at datetime 最近与 Home Assistant / App 同步时间
+
+=== PAGE 16 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+firmware_version string 终端固件版本
+haptic_enabled bool 震动反馈开关
+display_brightness 0-100 屏幕亮度
+6.3 DeviceContext
+字段 类型 说明
+device_context enum desktop / portable / magnetic
+motion_state enum still / moving / lifted
+orientation enum / vector 用于 Lift-to-Explain 与屏幕方向判断
+magnetic_attached bool Hall Sensor 判定磁吸状态（若硬件实现）
+规则
+DeviceContext 仅控制终端 UI、亮屏、震动和信息密度，不直接写入 energy_mode，不直接控制 
+SOLIX。
+
+=== PAGE 17 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+7. 技术架构
+采用“UI 与业务核心解耦、Home Assistant 作为状态与执行总线、MCP / Optimizer 作为策略层、
+GuangHeng Sense 作为实体感知层”的结构。
+Flutter App (Android + iOS) - 首页 / 策略 / 报表 / 设备 / 设置
+↓
+Home Assistant - 状态总线、历史数据、设备执行
+↓
+Energy Context + MCP - 天气、电价、SOLIX、用户能源模式
+↓
+Energy Optimizer - 24h 调度、Replan、Baseline 仿真
+↓
+Anker SOLIX Official Integration - 状态读取、受控写入
+↓
+Anker SOLIX - 家庭储能执行器
+光衡终端作为并行的实体感知入口：
+光衡终端 / ESP32-S3 - Ambient Display + Haptic + Intent Input
+↕ Wi-Fi / 可选 BLE 配网
+Home Assistant / 光衡 Context
+7.1 Flutter 技术基线
+ 目标平台：Android + iOS。Windows 仅作为开发电脑，不开发 Windows 客户端。
+ 状态管理固定：Provider + ChangeNotifier + MVVM。
+ 页面结构：View -> ViewModel -> Repository -> Service。
+ 图表使用成熟 Flutter chart 组件；若已采用 fl_chart 则复用。
+ 首页 3D 使用预渲染资产 + 动态标签 / 能量线。
+ 所有插件新增前检查 Android / iOS 兼容性，避免平台专属依赖。
+
+=== PAGE 18 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+7.2 无 SOLIX 实机时
+产品接口仍以 SOLIX / Home Assistant Entity Schema 为目标；本地开发允许使用 Mock Entity / Scenario 
+Replay 填充同一字段。Mock 只替代“数据来源”，不替代产品主链；未来接入真实设备时 App 和 Optimizer 
+不改变业务接口。
+
+=== PAGE 19 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+8. 光衡终端硬件 PRD
+重新定位
+光衡终端是家庭能源的实体 Companion 与增强感知入口：可桌面常驻、可随身携带、可磁吸手机或扩展
+腕带。它不是储能电池、不是电表、不是逆变器，也不是 SOLIX 替代品。
+8.1 硬件建议
+项目 V2.0 建议 用途
+主控 ESP32-S3 UI、网络、传感与轻量逻辑
+屏幕 约 1.8 英寸 AMOLED / 触摸 Ambient / Glance UI
+网络 Wi-Fi；BLE 可选 运行同步；BLE 只用于配网可选
+IMU 6 轴 IMU，P0 Lift-to-Explain、运动 / 姿态识别
+Hall Sensor 可选 P0.5 可靠识别磁吸手机状态
+触觉 LRA + haptic driver，P0 Haptic Language
+NFC 被动 NFC Tag，P0.5 / P1 Energy Handoff
+供电 内置 3.7V 锂电池 + USB-C 桌面 / 随身
+外形 约 55-65mm 圆角正方形 桌面 / 磁吸 / 随身；腕带为扩展适配
+8.2 设备场景状态 - 自动感知，不可在 App 手动选择
+Device Context 识别建议 终端自动行为
+Desktop 持续静止 + 固定姿态；可结合 USB 供电
+更长亮屏 / Energy Clock / Ambient 
+Dashboard
+Portable IMU 检测持续移动、抬起、翻腕 短时亮屏、大数字、关键提醒、低功耗
+Magnetic Hall 检测 + 稳定贴附姿态
+简化 Companion UI、减少误触、优先显
+示策略 / SOC / 节省
+
+=== PAGE 20 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+交互原则
+用户不需要打开 App 去选择“随身 / 磁吸 / 桌面”。设备自动理解自己如何被使用：Context 就是 
+Interface。
+8.3 光衡终端不做“迷你 App”
+硬件端不再复制“首页 / 策略 / 报表 / 设备”四个完整页面，而采用事件驱动的 Glance UI。推荐屏幕状态：
+ Ambient：当前 energy_mode、家庭储能 SOC、下一动作、今日节省。
+ Energy Clock：未来 24h 充电 / 光伏 / 放电 / 备用节奏。
+ Replan Event：计划变化前后，如 45% -> 75%。
+ Explain View：Lift-to-Explain 后显示天气、电价、SOC 等关键原因。
+ What-if Peek：固定策略 vs 智能策略的成本差异。
+ Intent Sheet：用户主动切换 SAVE / AUTO / BACKUP，确认后写入 Home Assistant。
+
+=== PAGE 21 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+9. GuangHeng Sense - 增强感知交互层
+GuangHeng Sense 的目标不是“多做几个炫酷动画”，而是建立一套家庭能源的物理交互语言：看见现在、
+看见未来、感觉变化、理解原因、证明价值，并在需要时自然进入手机深度管理。
+能力 用户体验 实现 优先级
+Energy Aura
+远处通过颜色 / 呼吸节奏感知状
+态
+AMOLED 边缘光环；不强依赖额
+外 RGB
+P0.5
+Energy Clock
+一眼看到未来 24h 充 / 放 / 光伏 / 
+备用
+圆形时间环 P0
+Haptic Language
+策略重算、异常、模式切换使用
+不同触觉节奏
+LRA P0
+Lift-to-Explain
+拿起设备自动从结果展开为“为
+什么”
+IMU + Explain UI P0
+Plan Morph 旧计划动态变形成新计划 终端 UI 动画 P0
+Future Alert
+提前提醒 1-2h 后高峰 / 风险，而
+非只提示当前
+Tariff / Weather Context P0.5
+What-if Peek 快速显示“不优化会怎样” Baseline vs Optimized 数据 P0
+Energy Handoff
+终端碰手机，App 直接打开对应
+解释页
+NFC Tag + Deep Link P0.5 / P1
+9.1 Energy Aura
+ 绿色慢呼吸：系统健康 / 光伏利用良好。
+ 蓝色流动：充电或低价准备阶段。
+ 橙色脉冲：高峰 / 放电阶段。
+ 异常时可短暂红色提示，但避免持续高亮造成焦虑。
+ 颜色表达状态，节奏表达紧迫程度。
+9.2 Haptic Language
+触觉节奏 语义
+1 次轻震 普通操作确认 / 策略写入成功
+2 次轻震 Replan 完成，计划发生重要变化
+
+=== PAGE 22 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+1 次较长震动 进入 BACKUP 等重要能源意图确认
+3 次短震 需要用户关注的重要异常
+9.3 Lift-to-Explain
+桌面状态只给结论；用户拿起并朝向自己时，IMU 触发 Explain View，展开“为什么现在放电 / 为什么目标 
+SOC 改变”。拿起本身就是“我想知道更多”的意图，不需要找菜单。
+9.4 Plan Morph + Future Alert
+Future Alert 在事件发生前告诉用户“即将发生什么”；Plan Morph 在 Replan 时把旧计划与新计划连续变形
+展示。两者共同把“AI 正在重新规划”变成可见事件。
+9.5 What-if Peek
+使用同一场景的 baseline_cost 与 estimated_cost 显示“如果继续固定策略会怎样”。例如固定策略 
+¥24.50、智能策略 ¥16.80、预计节省 ¥7.70。该值必须来自 Simulator / Mock Scenario，不得在 UI 写死为固
+定节省率。
+9.6 Energy Handoff
+硬件负责发现与提示，手机负责深入理解。通过被动 NFC Tag / Deep Link，用户将手机靠近终端即可打开 
+App 对应策略解释页。若 24 小时时间不足，可降级为扫码 / Deep Link 演示，不影响主闭环。
+
+=== PAGE 23 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+10. 核心用户流程与比赛 Demo
+10.1 主 Demo - 动态电价
+1. 系统获得未来电价：18:00-21:00 为高峰。
+2. 读取当前家庭储能 SOC、家庭负载与 energy_mode。
+3. Energy Brain 在 AUTO 下判断成本权重上升。
+4. Optimizer 计算高峰放电与 Reserve SOC。
+5. Home Assistant 将计划写入 SOLIX 控制链路，或使用同 Schema Mock 执行。
+6. App 策略页显示 18:00 高峰放电；光衡终端的 Energy Clock 同步未来计划。
+7. Future Alert 在高峰前提前提醒；进入执行时 Aura / Haptic 给出低干扰反馈。
+8. 结束后展示 Baseline vs Optimized。
+10.2 次 Demo - 天气变化触发 Replan
+9. 初始天气预测为晴天，夜间目标 SOC 设为 45%，给次日光伏留空间。
+10.Weather Context 更新为阴天 / 光伏不足。
+11.Energy Brain 触发 Replan。
+12.Optimizer 将夜间目标 SOC 提高到 75%。
+13.光衡终端两次轻震；Plan Morph 展示 45% -> 75%。
+14.用户拿起终端，Lift-to-Explain 展示“光伏预测下降 -> 提高夜间储能”。
+15.App 同步显示完整证据与新 24h 计划。
+10.3 用户能源意图 - BACKUP
+16.用户在 App 策略页或光衡终端 Intent Sheet 选择 BACKUP。
+17.系统发送 energy_mode=backup。
+18.Home Assistant 更新用户意图。
+19.Optimizer 提高 Reserve SOC，减少套利放电。
+20.App 与光衡终端同步新的 Energy Clock / 24h 计划。
+10.4 硬件场景感知 - 无需 App 选择
+21.终端桌面静止时进入 Desktop Context，展示 Ambient + Energy Clock。
+22.用户拿起设备，IMU 进入 Portable / Lift 状态，自动切换 Explain / Glance UI。
+23.磁吸到手机后，若 Hall 可用则进入 Magnetic Context，界面简化为大字号 Companion UI。
+24.这些状态只改变终端交互，不修改 SAVE/AUTO/BACKUP。
+
+=== PAGE 24 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+11. MVP 验收标准
+# 验收项 通过条件
+1 能源状态
+App 正确展示光伏、家庭、家庭储能核心状
+态
+2 策略模式 SAVE / AUTO / BACKUP 可切换并同步
+3 24h 计划 至少 4 类时间片：充电 / 光伏 / 放电 / 备用
+4 策略解释 至少 3 条可追溯证据
+5 执行链
+Home Assistant 收到策略输出 / 写入动作或
+等价 Mock Replay
+6 反馈 状态变化后 App 与终端自动同步
+7 A/B 验证 同场景计算 Baseline 与 Optimized 成本
+8 设备页正确性
+只显示光衡终端自身状态，不混入家庭能源传
+感数据
+9 Device Context
+桌面 / 拿起至少可由 IMU 自动区分；不提供 
+App 手动选择
+10 Energy Clock 终端可显示未来 24h 策略节奏
+11 Haptic Language Replan 至少有两次轻震反馈
+12 Lift-to-Explain 拿起终端可进入原因解释界面
+13 Plan Morph 天气变化 Demo 可展示计划前后变化
+14 What-if Peek
+终端或 App 可展示 Baseline vs Optimized 差
+异
+15 容灾
+数据异常时停止危险写操作；Demo 可一键 
+Replay
+11.1 Definition of Done
+MVP 完成
+评委在 3-5 分钟内能够看到：上下文变化 -> 计划重算 -> Home Assistant / SOLIX 执行 -> App / 光衡终端
+解释 -> Baseline 对比，并明确理解“为什么这个硬件不是第二个手机”。
+
+=== PAGE 25 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+
+=== PAGE 26 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+12. 24 小时开发计划
+时间 重点 交付
+0-2h 工程骨架 + 数据协议
+EnergyState / TerminalState / Strategy 
+Schema / Scenario
+2-6h 策略与仿真
+Baseline、Optimizer、24h Plan、
+Replan
+6-9h Home Assistant / Adapter 状态读取、模式写入、Mock / Replay
+9-14h Flutter App
+首页、策略、报表、设备、设置 / 权限框
+架
+14-18h 光衡终端基础
+AMOLED UI、Wi-Fi 同步、IMU、LRA、
+Energy Clock
+18-21h GuangHeng Sense P0
+Lift-to-Explain、Haptic、Plan Morph、
+What-if Peek
+21-22h P0.5 尝试
+Energy Aura、Future Alert；NFC 
+Handoff 有余力再做
+22-24h 集成与稳定性
+两大 Demo、Replay、异常、录屏、数据
+校验；不再加功能
+12.1 功能优先级与降级策略
+层级 功能 降级原则
+P0
+Energy Clock / Haptic / Lift-to-Explain / 
+Plan Morph / What-if Peek
+必须完成或用固定场景保证可演示
+P0.5 Energy Aura / Future Alert 时间不足时可简化动画，不影响数据主链
+P1
+Energy Handoff NFC / Hall Magnetic 
+Context
+不足时使用 Deep Link / 手动触发 Demo，
+不拖累核心闭环
+
+=== PAGE 27 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+13. 风险、容灾与开发前检查
+风险 影响 应对
+无 SOLIX 实机 无法现场验证真实电池控制
+Mock Entity 与正式接口同 Schema；有实机
+后只替换 Adapter
+官方插件字段差异 Entity 名称 / 写入能力不一致 开工第一小时确认 Entity 列表并冻结映射表
+天气 / 电价 API 不稳定 策略输入中断 固定场景缓存 + Scenario Replay
+UI 3D 资源耗时 拖慢 Flutter 开发 静态预渲染 3D + Flutter 动态标注
+LLM 输出不稳定 策略不可复现 LLM 只做场景判断 / 解释，数值由 Optimizer
+硬件传感误判 Context UI 频繁切换
+阈值 + debounce + hysteresis；Context 不
+影响能源策略
+NFC / Hall 来不及 亮点功能受限 列为 P0.5 / P1，主 Demo 不依赖
+硬件进度拖延 影响主 Demo
+App / Optimizer 与硬件并行，硬件不是主策
+略依赖
+13.1 现场 Demo 容灾
+ 保留 Scenario Replay：天气 API / 实机临时不可用时仍可重放同一数据结构。
+ 每个 Demo 提供“一键重置”到固定 SOC / 电价 / 负载。
+ 硬件无法联网时可进入 Demo Replay，但界面明确标记 Demo。
+ 最后 2 小时不再增加功能，只修稳定性与演示路径。
+13.2 开发前必须冻结的接口
+ Home Assistant Entity 映射表。
+ Optimizer 输入 / 输出 JSON Schema。
+ Flutter 统一 EnergyState / TerminalState / ReportState 模型。
+ ESP32 与 Home Assistant 同步协议（HTTP / MQTT / ESPHome 三选一，优先团队最熟悉方案）。
+ energy_mode 与 DeviceContext 两套 enum 明确分离。
+
+=== PAGE 28 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+14. UI/UX 开发基准
+ 视觉方向：白色轻量能源产品风格；蓝色用于系统 / 信息，绿色用于正常 / 节省，橙色用于高峰 / 预警。
+ 首页 3D 房屋 + 光伏 + 家庭储能为视觉中心，避免游戏化。
+ 移动端只以 Android + iOS 竖屏为 P0；常见 320-430dp 宽度不得明显溢出。
+ 一级导航：首页 / 策略 / 报表 / 设备。设置为二级入口。
+ 设备页只展示光衡终端自身状态；系统连接移动到设置。
+ 光衡终端使用 Glance UI，不复制手机导航结构。
+ 动画服务于“状态变化可感”，不做无意义炫技。
+14.1 页面与问题映射
+界面 回答的问题
+首页 家里现在发生什么？
+策略 系统为什么这么做？接下来准备怎么做？
+报表 这个策略到底创造了多少价值？
+设备 我的光衡终端是否正常？
+设置 App 和终端拥有哪些权限、连接与偏好？
+光衡终端 Ambient 有什么值得我现在知道？
+光衡终端 Explain 为什么计划刚刚变了？
+14.2 动画语言
+场景 动画 / 反馈
+策略切换 AnimatedContainer + AnimatedSwitcher + 轻触觉
+Replan Plan Morph + 2 次轻震
+高峰临近 Aura 蓝 -> 橙 + Future Alert
+拿起终端 Lift-to-Explain 内容展开
+设备同步 Sync icon 旋转后“刚刚同步”
+异常 低频、明确、可恢复，不持续制造焦虑
+
+=== PAGE 29 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+
+=== PAGE 30 ===
+光衡 | PRD V2.0 | Anker Hackathon
+光衡 - 家庭能源 Autopilot | 开发基线
+15. 开发基线结论
+Go / No-Go：GO
+V2.0 已把产品重新收敛为一条清晰主线：AI / MCP 理解上下文，Optimizer 生成确定性计划，Home 
+Assistant / SOLIX 执行，App 负责深度管理与解释，光衡终端负责增强感知和快速意图输入。
+15.1 最终产品叙事
+不要把项目描述成“AI + Home Assistant + ESP32”。比赛现场应讲成：
+光衡的系统分工
+AI 负责理解未来；Optimizer 负责做可验证的决策；SOLIX 负责执行；光衡 App 负责深度管理；光衡终端
+负责把后台决策变成人能看到、感觉到、理解并快速干预的体验。
+15.2 评委 3-5 分钟记忆点
+25.Energy Clock：看见未来 24 小时。
+26.天气变化触发 Replan：45% -> 75%。
+27.Haptic Language：两次轻震告诉用户计划已经变化。
+28.Lift-to-Explain：拿起即显示“为什么”。
+29.What-if Peek：直接看到不优化会多花多少钱。
+30.需要深入时通过 Handoff 进入手机完整解释。
+一句话收尾：App 用来管理能源，光衡终端让能源随时可见、变化可感、随手可控。
